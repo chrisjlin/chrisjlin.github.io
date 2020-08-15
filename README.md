@@ -1,4 +1,4 @@
-# chrisjlin.github.io
+# chrisjlin.com (chrisjlin.github.io)
 Started Aug 14, 2020
 
 # Project Objectives:
