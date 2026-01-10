@@ -1,32 +1,297 @@
 <!DOCTYPE html>
-<html lang='en'>
-  <head>
-    <title>Chris Lin</title>
-  </head>
-  <body>
-    <h1>Hello!</h1>
-    <h2>I'm Chris.</h2>
-    <h3>I am: </h3>
-    <ul>
-      <li>A graduate of the <strong>University of Pennsylvania</strong></li>
-      <li>An incoming Program Manager at <strong>Microsoft</strong></li>
-      <li>Currently trying to learn web development on the side</li>
-    </ul>
-    <h3>My favorite foods are: </h3>
-    <ol>
-      <li>Sticky Rice</li>
-      <li>Soondubu Jigae</li>
-      <li>Navel Oranges</li>
-      <p><em>and</em>...</p>
-      <li>Broccoli</li>
-    </ol>
-    <hr/>
-    <p>This is a line<br/>
-      break!</p>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chris Lin | Product Manager & AI Enthusiast</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Gravitational Spheres Background -->
+    <div class="gravity-bg">
+        <canvas id="warpGrid"></canvas>
+    </div>
 
-    <hr/>
-    <p><em>Built by Chris Lin, 2020</em></p>
-    <p><a href='links-and-images/links.html'>Links</a>    <a href='links-and-images/images.html'>Images</a>    <a href='links-and-images/misc/extras.html'>Extras</a></p>
-    <p><a href='https://reach.at/cjlin'>FAQ </a> <a href='contact.html'> Contact</a></p>
-  </body>
+    <!-- Minimal Header -->
+    <header class="minimal-header">
+        <a href="/" class="header-logo">
+            <span class="prompt">~/</span>chris-lin
+        </a>
+    </header>
+
+    <!-- Hint Text -->
+    <div class="hint-text" id="hint-text">
+        <p>Drag a sphere to the center to explore</p>
+    </div>
+
+    <!-- Content Panel (Modal Overlay) -->
+    <div class="content-panel" id="content-panel">
+        <div class="panel-backdrop" id="panel-backdrop"></div>
+        <div class="panel-container">
+            <button class="panel-close" id="panel-close" aria-label="Close panel">×</button>
+            <div class="panel-content" id="panel-content">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Content Templates -->
+    <template id="template-about">
+        <div class="template-content about-template">
+            <h2 class="panel-title">
+                <span class="section-number">01.</span> About Me
+            </h2>
+            <div class="about-content">
+                <div class="about-text">
+                    <p>
+                        I'm a product manager who loves working at the intersection
+                        of technology and user needs.
+                    </p>
+                    <p>
+                        I graduated from the <span class="highlight">University of Pennsylvania</span>
+                        and currently work as a Product Manager at <span class="highlight">Microsoft</span>.
+                        My focus is on translating complex technical capabilities into
+                        products that genuinely help people.
+                    </p>
+                    <p>
+                        I'm now diving deep into AI/ML — not just as a user, but as a builder.
+                        I believe the best products come from understanding both the technical
+                        possibilities and the human needs they serve.
+                    </p>
+                    <div class="about-skills">
+                        <h3 class="skills-title">Skills & Tools:</h3>
+                        <ul class="skills-list">
+                            <li><span class="skill-bullet">◆</span> Product Strategy & Vision</li>
+                            <li><span class="skill-bullet">◆</span> User Research & Analytics</li>
+                            <li><span class="skill-bullet">◆</span> Agile & Scrum</li>
+                            <li><span class="skill-bullet">◆</span> Python & Data Analysis</li>
+                            <li><span class="skill-bullet">◆</span> Machine Learning Basics</li>
+                            <li><span class="skill-bullet">◆</span> SQL & Databases</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="about-image">
+                    <div class="image-wrapper">
+                        <div class="image-placeholder">
+                            <span class="placeholder-icon">◇</span>
+                            <span class="placeholder-text">profile.jpg</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="template-projects">
+        <div class="template-content projects-template">
+            <h2 class="panel-title">
+                <span class="section-number">02.</span> Projects
+            </h2>
+            <p class="section-subtitle">Things I've built and shipped</p>
+
+            <div class="projects-grid">
+                <!-- Project Card 1 -->
+                <article class="project-card">
+                    <div class="project-header">
+                        <div class="project-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </div>
+                        <div class="project-links">
+                            <a href="#" class="project-link" aria-label="View on GitHub">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                                </svg>
+                            </a>
+                            <a href="#" class="project-link" aria-label="View live demo">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                </svg>
+                            </a>
+                        </div>
+                    </div>
+                    <h3 class="project-title">Project Alpha</h3>
+                    <p class="project-description">
+                        An AI-powered tool for analyzing user behavior patterns.
+                        Helped teams make data-driven decisions faster.
+                    </p>
+                    <ul class="project-tech">
+                        <li>Python</li>
+                        <li>TensorFlow</li>
+                        <li>FastAPI</li>
+                    </ul>
+                </article>
+
+                <!-- Project Card 2 -->
+                <article class="project-card">
+                    <div class="project-header">
+                        <div class="project-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </div>
+                        <div class="project-links">
+                            <a href="#" class="project-link" aria-label="View on GitHub">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                                </svg>
+                            </a>
+                            <a href="#" class="project-link" aria-label="View live demo">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                </svg>
+                            </a>
+                        </div>
+                    </div>
+                    <h3 class="project-title">Project Beta</h3>
+                    <p class="project-description">
+                        A dashboard for visualizing real-time business metrics.
+                        Made complex data accessible and actionable for stakeholders.
+                    </p>
+                    <ul class="project-tech">
+                        <li>SQL</li>
+                        <li>Tableau</li>
+                        <li>Python</li>
+                    </ul>
+                </article>
+
+            </div>
+
+            <a href="/projects" class="view-all-link">View all projects →</a>
+        </div>
+    </template>
+
+    <template id="template-blog">
+        <div class="template-content blog-template">
+            <h2 class="panel-title">
+                <span class="section-number">03.</span> Blog
+            </h2>
+            <p class="section-subtitle">Thoughts on product, AI, and building things</p>
+
+            <div class="blog-grid">
+                <!-- Blog Post 1 -->
+                <article class="blog-card">
+                    <div class="blog-meta">
+                        <span class="blog-date">Jan 2026</span>
+                        <span class="blog-category">AI/ML</span>
+                    </div>
+                    <h3 class="blog-title">
+                        <a href="#">Why Product Managers Should Learn About AI</a>
+                    </h3>
+                    <p class="blog-excerpt">
+                        A deep dive into why understanding AI fundamentals is becoming
+                        essential for modern product managers...
+                    </p>
+                    <a href="#" class="blog-read-more">
+                        Read more <span class="arrow">→</span>
+                    </a>
+                </article>
+
+                <!-- Blog Post 2 -->
+                <article class="blog-card">
+                    <div class="blog-meta">
+                        <span class="blog-date">Dec 2025</span>
+                        <span class="blog-category">Technical</span>
+                    </div>
+                    <h3 class="blog-title">
+                        <a href="#">Lessons from Building My First ML Model</a>
+                    </h3>
+                    <p class="blog-excerpt">
+                        What I learned as a PM diving into the technical side of
+                        machine learning for the first time...
+                    </p>
+                    <a href="#" class="blog-read-more">
+                        Read more <span class="arrow">→</span>
+                    </a>
+                </article>
+
+            </div>
+
+            <a href="/blog" class="view-all-link">View all posts →</a>
+        </div>
+    </template>
+
+    <template id="template-contact">
+        <div class="template-content contact-template">
+            <h2 class="panel-title">
+                <span class="section-number">04.</span> Get In Touch
+            </h2>
+            <div class="contact-content">
+                <p class="contact-description">
+                    I'm currently exploring opportunities at the intersection of
+                    product management and AI. Whether you want to discuss a role,
+                    collaborate on a project, or just say hello — my inbox is always open.
+                </p>
+
+                <div class="contact-terminal">
+                    <div class="terminal-header">
+                        <div class="terminal-buttons">
+                            <span class="terminal-btn red"></span>
+                            <span class="terminal-btn yellow"></span>
+                            <span class="terminal-btn green"></span>
+                        </div>
+                        <span class="terminal-title">contact</span>
+                    </div>
+                    <form class="contact-form" id="contact-form">
+                        <div class="form-line">
+                            <span class="prompt">$</span>
+                            <label for="name">name=</label>
+                            <input type="text" id="name" name="name" placeholder='"Your Name"' required>
+                        </div>
+                        <div class="form-line">
+                            <span class="prompt">$</span>
+                            <label for="email">email=</label>
+                            <input type="email" id="email" name="email" placeholder='"you@example.com"' required>
+                        </div>
+                        <div class="form-line form-line-textarea">
+                            <span class="prompt">$</span>
+                            <label for="message">message=</label>
+                            <textarea id="message" name="message" placeholder='"Your message here..."' rows="4" required></textarea>
+                        </div>
+                        <div class="form-line">
+                            <span class="prompt">&gt;</span>
+                            <button type="submit" class="submit-btn">
+                                send_message() <span class="cursor">_</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="social-links">
+                    <p class="social-title">Find me elsewhere:</p>
+                    <div class="social-icons">
+                        <a href="https://github.com/chrisjlin" class="social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                            </svg>
+                        </a>
+                        <a href="https://linkedin.com/in/chris-j-lin" class="social-link" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path>
+                                <rect x="2" y="9" width="4" height="12"></rect>
+                                <circle cx="4" cy="4" r="2"></circle>
+                            </svg>
+                        </a>
+                        <a href="mailto:hello@chrislin.dev" class="social-link" aria-label="Email">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                <polyline points="22,6 12,13 2,6"></polyline>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="main.js"></script>
+</body>
 </html>
