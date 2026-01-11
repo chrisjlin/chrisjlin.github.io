@@ -116,23 +116,8 @@ function initPuzzleNavigation() {
 
     // State
     let time = 0;
-    let draggedSphere = null;
-    let isDragging = false;
     let hoveredSphere = null;
     let isMobile = 'ontouchstart' in window;
-    
-    // Click vs drag detection
-    let mouseDownTime = 0;
-    let mouseDownX = 0;
-    let mouseDownY = 0;
-    const CLICK_TIME_THRESHOLD = 200;  // ms
-    const CLICK_DISTANCE_THRESHOLD = 5;  // px
-    
-    // Drag resistance spring
-    let dragAnchorX = 0;
-    let dragAnchorY = 0;
-    let dragAnchorAngle = 0;
-    const DRAG_SPRING_STRENGTH = 0.02;
 
     // DOM elements
     const contentPanel = document.getElementById('content-panel');
@@ -299,205 +284,43 @@ function initPuzzleNavigation() {
         const x = e.clientX;
         const y = e.clientY;
 
-        if (isDragging && draggedSphere) {
-            // Apply drag with spring resistance toward orbit
-            const targetX = x;
-            const targetY = y;
-            
-            // Calculate orbital anchor position (where sphere would be on orbit)
-            const tempAngle = dragAnchorAngle + (Date.now() - mouseDownTime) * draggedSphere.baseAngularVelocity * 0.001;
-            const a = draggedSphere.semiMajorAxis * draggedSphere.orbitScale;
-            const e_val = draggedSphere.eccentricity;
-            const b = a * Math.sqrt(1 - e_val * e_val);
-            const cosT = Math.cos(draggedSphere.orbitTilt);
-            const sinT = Math.sin(draggedSphere.orbitTilt);
-            const ox = a * Math.cos(tempAngle);
-            const oy = b * Math.sin(tempAngle);
-            const anchorX = draggedSphere.orbitCenterX + ox * cosT - oy * sinT;
-            const anchorY = draggedSphere.orbitCenterY + ox * sinT + oy * cosT;
-            
-            // Spring force toward anchor (resistance)
-            const dx = targetX - anchorX;
-            const dy = targetY - anchorY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const maxDrag = 150;  // Maximum distance sphere can be pulled from orbit
-            
-            if (dist > maxDrag) {
-                // Limit drag distance
-                draggedSphere.x = anchorX + (dx / dist) * maxDrag;
-                draggedSphere.y = anchorY + (dy / dist) * maxDrag;
-            } else {
-                draggedSphere.x = targetX;
-                draggedSphere.y = targetY;
-            }
+        // Check hover state
+        hoveredSphere = getSphereAtPosition(x, y);
 
-            e.preventDefault();
+        if (hoveredSphere) {
+            canvas.style.pointerEvents = 'auto';
+            canvas.style.cursor = 'pointer';
+            document.body.style.cursor = 'pointer';
         } else {
-            // Check hover state
-            hoveredSphere = getSphereAtPosition(x, y);
-
-            if (hoveredSphere) {
-                canvas.style.pointerEvents = 'auto';
-                canvas.style.cursor = 'pointer';
-                document.body.style.cursor = 'pointer';
-            } else {
-                canvas.style.pointerEvents = 'none';
-                canvas.style.cursor = 'default';
-                document.body.style.cursor = '';
-            }
+            canvas.style.pointerEvents = 'none';
+            canvas.style.cursor = 'default';
+            document.body.style.cursor = '';
         }
     }
 
-    function handleCanvasMouseDown(e) {
+    function handleCanvasClick(e) {
         const x = e.clientX;
         const y = e.clientY;
 
         const sphere = getSphereAtPosition(x, y);
         if (sphere) {
-            mouseDownTime = Date.now();
-            mouseDownX = x;
-            mouseDownY = y;
-            draggedSphere = sphere;
-            dragAnchorAngle = sphere.angle;
-            canvas.style.cursor = 'grabbing';
-            document.body.style.cursor = 'grabbing';
+            showContentPanel(sphere.sectionId);
             e.preventDefault();
         }
-    }
-
-    function handleDocumentMouseUp(e) {
-        if (draggedSphere) {
-            const x = e.clientX;
-            const y = e.clientY;
-            const timeDelta = Date.now() - mouseDownTime;
-            const distDelta = Math.sqrt((x - mouseDownX) ** 2 + (y - mouseDownY) ** 2);
-            
-            // Check if this was a click (not a drag)
-            if (timeDelta < CLICK_TIME_THRESHOLD && distDelta < CLICK_DISTANCE_THRESHOLD) {
-                // It's a click - open the section
-                showContentPanel(draggedSphere.sectionId);
-            } else if (isDragging) {
-                // It was a drag - recalculate orbit from new position
-                recalculateOrbitFromPosition(draggedSphere);
-            }
-
-            isDragging = false;
-            draggedSphere = null;
-            canvas.style.cursor = 'default';
-            document.body.style.cursor = '';
-        }
-    }
-    
-    // Check if dragging has started (movement threshold)
-    function checkDragStart(x, y) {
-        if (draggedSphere && !isDragging) {
-            const distDelta = Math.sqrt((x - mouseDownX) ** 2 + (y - mouseDownY) ** 2);
-            const timeDelta = Date.now() - mouseDownTime;
-            if (distDelta >= CLICK_DISTANCE_THRESHOLD || timeDelta >= CLICK_TIME_THRESHOLD) {
-                isDragging = true;
-            }
-        }
-    }
-    
-    // Recalculate orbital parameters after drag
-    function recalculateOrbitFromPosition(sphere) {
-        const centerX = sphere.orbitCenterX;
-        const centerY = sphere.orbitCenterY;
-        
-        // Calculate new distance from center
-        const dx = sphere.x - centerX;
-        const dy = sphere.y - centerY;
-        const newDistance = Math.sqrt(dx * dx + dy * dy);
-        
-        // Calculate new angle
-        sphere.angle = Math.atan2(dy, dx);
-        
-        // Adjust semi-major axis based on new distance (with limits)
-        const minOrbit = 0.12;
-        const maxOrbit = 0.48;
-        const newSemiMajor = Math.max(minOrbit, Math.min(maxOrbit, newDistance / sphere.orbitScale));
-        
-        // Slightly perturb eccentricity based on drag intensity
-        const dragIntensity = Math.abs(newSemiMajor - sphere.semiMajorAxis) / sphere.semiMajorAxis;
-        sphere.eccentricity = Math.min(0.7, sphere.eccentricity + dragIntensity * 0.1);
-        
-        sphere.semiMajorAxis = newSemiMajor;
-        
-        // Clear trail when orbit changes
-        sphere.trail = [];
     }
 
     // Touch handlers for mobile
-    function handleTouchStart(e) {
-        const touch = e.touches[0];
-        const x = touch.clientX;
-        const y = touch.clientY;
+    function handleTouchTap(e) {
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            const x = touch.clientX;
+            const y = touch.clientY;
 
-        const sphere = getSphereAtPosition(x, y);
-        if (sphere) {
-            mouseDownTime = Date.now();
-            mouseDownX = x;
-            mouseDownY = y;
-            draggedSphere = sphere;
-            dragAnchorAngle = sphere.angle;
-            e.preventDefault();
-        }
-    }
-
-    function handleTouchMove(e) {
-        if (draggedSphere && e.touches[0]) {
-            const x = e.touches[0].clientX;
-            const y = e.touches[0].clientY;
-            
-            checkDragStart(x, y);
-            
-            if (isDragging) {
-                // Apply drag with spring resistance (same as mouse)
-                const a = draggedSphere.semiMajorAxis * draggedSphere.orbitScale;
-                const e_val = draggedSphere.eccentricity;
-                const b = a * Math.sqrt(1 - e_val * e_val);
-                const cosT = Math.cos(draggedSphere.orbitTilt);
-                const sinT = Math.sin(draggedSphere.orbitTilt);
-                const tempAngle = dragAnchorAngle + (Date.now() - mouseDownTime) * draggedSphere.baseAngularVelocity * 0.001;
-                const ox = a * Math.cos(tempAngle);
-                const oy = b * Math.sin(tempAngle);
-                const anchorX = draggedSphere.orbitCenterX + ox * cosT - oy * sinT;
-                const anchorY = draggedSphere.orbitCenterY + ox * sinT + oy * cosT;
-                
-                const dx = x - anchorX;
-                const dy = y - anchorY;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const maxDrag = 150;
-                
-                if (dist > maxDrag) {
-                    draggedSphere.x = anchorX + (dx / dist) * maxDrag;
-                    draggedSphere.y = anchorY + (dy / dist) * maxDrag;
-                } else {
-                    draggedSphere.x = x;
-                    draggedSphere.y = y;
-                }
+            const sphere = getSphereAtPosition(x, y);
+            if (sphere) {
+                showContentPanel(sphere.sectionId);
+                e.preventDefault();
             }
-
-            e.preventDefault();
-        }
-    }
-
-    function handleTouchEnd(e) {
-        if (draggedSphere) {
-            const timeDelta = Date.now() - mouseDownTime;
-            const x = draggedSphere.x;
-            const y = draggedSphere.y;
-            const distDelta = Math.sqrt((x - mouseDownX) ** 2 + (y - mouseDownY) ** 2);
-            
-            // Check if this was a tap (not a drag)
-            if (timeDelta < CLICK_TIME_THRESHOLD && distDelta < CLICK_DISTANCE_THRESHOLD) {
-                showContentPanel(draggedSphere.sectionId);
-            } else if (isDragging) {
-                recalculateOrbitFromPosition(draggedSphere);
-            }
-
-            isDragging = false;
-            draggedSphere = null;
         }
     }
 
@@ -515,17 +338,11 @@ function initPuzzleNavigation() {
     }
 
     // Event listeners
-    document.addEventListener('mousemove', (e) => {
-        checkDragStart(e.clientX, e.clientY);
-        handleDocumentMouseMove(e);
-    });
-    document.addEventListener('mouseup', handleDocumentMouseUp);
-    canvas.addEventListener('mousedown', handleCanvasMouseDown);
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    canvas.addEventListener('click', handleCanvasClick);
 
     // Touch support
-    document.addEventListener('touchstart', handleTouchStart, { passive: false });
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleTouchEnd);
+    canvas.addEventListener('touchstart', handleTouchTap, { passive: false });
 
     // Grid displacement calculations with gravity well depth
     function getGravityWellDisplacement(px, py, sphere) {
@@ -973,7 +790,6 @@ function initPuzzleNavigation() {
     function drawSphere3D(sphere) {
         const { radius, colors } = sphere;
         const isHovered = sphere === hoveredSphere;
-        const isDragged = sphere === draggedSphere;
 
         // Project sphere position to screen space
         const proj = projectToScreen(sphere.x, sphere.y);
@@ -1115,7 +931,7 @@ function initPuzzleNavigation() {
         ctx.stroke();
 
         // === 8. HOVER RING ===
-        if (isHovered && !isDragged) {
+        if (isHovered) {
             ctx.beginPath();
             ctx.arc(x, y, r + 8, 0, Math.PI * 2);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
@@ -1144,12 +960,11 @@ function initPuzzleNavigation() {
 
         const { x, y, radius, colors } = sphere;
         const isHovered = sphere === hoveredSphere;
-        const isDragged = sphere === draggedSphere;
 
         const scaleMultiplier = isHovered ? 1.15 : 1.0;
         const drawRadius = radius * scaleMultiplier;
 
-        if (isHovered && !isDragged) {
+        if (isHovered) {
             ctx.beginPath();
             ctx.arc(x, y, drawRadius + 6, 0, Math.PI * 2);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
@@ -1271,8 +1086,6 @@ function initPuzzleNavigation() {
     // Physics: Keep spheres within canvas bounds (hard constraint)
     function constrainSpheresToCanvas() {
         for (const sphere of spheres) {
-            if (sphere === draggedSphere) continue;
-
             const margin = sphere.radius;
 
             // Left bound
@@ -1301,8 +1114,6 @@ function initPuzzleNavigation() {
     // Physics: Update orbital motion
     function updateOrbitalMotion() {
         for (const sphere of spheres) {
-            if (sphere === draggedSphere) continue;
-            
             // Update orbit center in case of resize
             sphere.orbitCenterX = canvas.width / 2;
             sphere.orbitCenterY = canvas.height / 2;
