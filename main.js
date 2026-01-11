@@ -18,40 +18,111 @@ function initPuzzleNavigation() {
     const ctx = canvas.getContext('2d');
     let animationId;
 
-    // Grid settings
-    const gridSpacing = 40;
-    const gridColor = 'rgba(160, 184, 208, 0.4)';
-    const sphereColor = {
-        highlight: '#ffffff',
-        mid: '#9ab0c4',
-        dark: '#4a6278',
-        shadow: '#3d5266'
+    // Grid settings - subtle for space theme
+    const gridSpacing = 60;
+    const gridColor = 'rgba(40, 60, 100, 0.15)';
+
+    // Central star settings
+    const centralStar = {
+        baseRadius: 70,
+        pulsePhase: 0,
+        glowColor: '#FFA500'
     };
 
-    // Sphere definitions with section mappings and physics properties
+    // Star field (cached for performance)
+    let starField = null;
+    let starFieldCanvas = null;
+
+    // Sphere definitions with orbital properties
+    // COLOR PALETTES:
+    // Deep Space Jewels (alt):  Sapphire, Amethyst, Emerald, Amber
+    // Warm Metallics (current): Silver, Bronze, Patina, Gold
     const spheres = [
-        { xPct: 0.10, yPct: 0.25, radius: 80, depth: 160, phase: 0, sectionId: 'about', label: 'About', homeX: 0.10, homeY: 0.25, vx: 0, vy: 0, pressDepth: 1.0 },
-        { xPct: 0.90, yPct: 0.30, radius: 70, depth: 140, phase: 2, sectionId: 'projects', label: 'Projects', homeX: 0.90, homeY: 0.30, vx: 0, vy: 0, pressDepth: 1.0 },
-        { xPct: 0.12, yPct: 0.70, radius: 75, depth: 150, phase: 4, sectionId: 'blog', label: 'Blog', homeX: 0.12, homeY: 0.70, vx: 0, vy: 0, pressDepth: 1.0 },
-        { xPct: 0.88, yPct: 0.75, radius: 65, depth: 130, phase: 6, sectionId: 'contact', label: 'Contact', homeX: 0.88, homeY: 0.75, vx: 0, vy: 0, pressDepth: 1.0 }
+        { 
+            sectionId: 'about', label: 'About',
+            radius: 38, 
+            semiMajorAxis: 0.20,  // As fraction of min(width,height)
+            eccentricity: 0.15,
+            orbitTilt: 0.1,  // Radians
+            angle: 0,
+            baseAngularVelocity: 0.003,
+            // Deep Space Jewels - Sapphire
+            // colors: { highlight: '#7090c0', mid: '#506a98', dark: '#3a4a70', shadow: '#2a3a50' },
+            // Warm Metallics - Silver
+            colors: { highlight: '#c0d0e0', mid: '#90a0b0', dark: '#607080', shadow: '#405060' },
+            trail: [],
+            vx: 0, vy: 0,
+            orbitCenterX: 0, orbitCenterY: 0
+        },
+        { 
+            sectionId: 'projects', label: 'Projects',
+            radius: 34, 
+            semiMajorAxis: 0.30,
+            eccentricity: 0.2,
+            orbitTilt: -0.15,
+            angle: Math.PI * 0.5,
+            baseAngularVelocity: 0.0022,
+            // Deep Space Jewels - Amethyst
+            // colors: { highlight: '#9878a8', mid: '#785888', dark: '#583868', shadow: '#382848' },
+            // Warm Metallics - Bronze
+            colors: { highlight: '#e0c8b0', mid: '#c0a080', dark: '#907050', shadow: '#605030' },
+            trail: [],
+            vx: 0, vy: 0,
+            orbitCenterX: 0, orbitCenterY: 0
+        },
+        { 
+            sectionId: 'blog', label: 'Blog',
+            radius: 30, 
+            semiMajorAxis: 0.40,
+            eccentricity: 0.12,
+            orbitTilt: 0.2,
+            angle: Math.PI,
+            baseAngularVelocity: 0.0016,
+            // Deep Space Jewels - Emerald
+            // colors: { highlight: '#60b8a0', mid: '#409078', dark: '#306858', shadow: '#204838' },
+            // Warm Metallics - Patina
+            colors: { highlight: '#b0c8c0', mid: '#80a098', dark: '#507068', shadow: '#304840' },
+            trail: [],
+            vx: 0, vy: 0,
+            orbitCenterX: 0, orbitCenterY: 0
+        },
+        { 
+            sectionId: 'contact', label: 'Contact',
+            radius: 28, 
+            semiMajorAxis: 0.50,
+            eccentricity: 0.18,
+            orbitTilt: -0.05,
+            angle: Math.PI * 1.5,
+            baseAngularVelocity: 0.0012,
+            // Deep Space Jewels - Amber
+            // colors: { highlight: '#c8a060', mid: '#a88040', dark: '#786030', shadow: '#584020' },
+            // Warm Metallics - Gold
+            colors: { highlight: '#e8d8a0', mid: '#c8b070', dark: '#988050', shadow: '#685030' },
+            trail: [],
+            vx: 0, vy: 0,
+            orbitCenterX: 0, orbitCenterY: 0
+        }
     ];
-
-    // Receptacle settings
-    const receptacle = {
-        xPct: 0.5,
-        yPct: 0.5,
-        radius: 100,
-        pulsePhase: 0
-    };
 
     // State
     let time = 0;
     let draggedSphere = null;
     let isDragging = false;
-    let dockedSphere = null;
     let hoveredSphere = null;
-    let selectedSphere = null; // For mobile tap-to-select
     let isMobile = 'ontouchstart' in window;
+    
+    // Click vs drag detection
+    let mouseDownTime = 0;
+    let mouseDownX = 0;
+    let mouseDownY = 0;
+    const CLICK_TIME_THRESHOLD = 200;  // ms
+    const CLICK_DISTANCE_THRESHOLD = 5;  // px
+    
+    // Drag resistance spring
+    let dragAnchorX = 0;
+    let dragAnchorY = 0;
+    let dragAnchorAngle = 0;
+    const DRAG_SPRING_STRENGTH = 0.02;
 
     // DOM elements
     const contentPanel = document.getElementById('content-panel');
@@ -59,43 +130,112 @@ function initPuzzleNavigation() {
     const panelClose = document.getElementById('panel-close');
     const panelBackdrop = document.getElementById('panel-backdrop');
     const hintText = document.getElementById('hint-text');
+    
+    // Generate star field
+    function generateStarField() {
+        starFieldCanvas = document.createElement('canvas');
+        starFieldCanvas.width = canvas.width;
+        starFieldCanvas.height = canvas.height;
+        const starCtx = starFieldCanvas.getContext('2d');
+        
+        // Dark space background
+        starCtx.fillStyle = '#0a0a1a';
+        starCtx.fillRect(0, 0, starFieldCanvas.width, starFieldCanvas.height);
+        
+        // Generate random stars
+        const starCount = Math.floor((canvas.width * canvas.height) / 3000);
+        for (let i = 0; i < starCount; i++) {
+            const x = Math.random() * starFieldCanvas.width;
+            const y = Math.random() * starFieldCanvas.height;
+            const size = Math.random() * 1.5 + 0.5;
+            const opacity = Math.random() * 0.5 + 0.3;
+            
+            starCtx.beginPath();
+            starCtx.arc(x, y, size, 0, Math.PI * 2);
+            starCtx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+            starCtx.fill();
+        }
+        
+        // Add a few brighter stars
+        for (let i = 0; i < starCount / 10; i++) {
+            const x = Math.random() * starFieldCanvas.width;
+            const y = Math.random() * starFieldCanvas.height;
+            const size = Math.random() * 1 + 1.5;
+            
+            // Glow effect
+            const glow = starCtx.createRadialGradient(x, y, 0, x, y, size * 3);
+            glow.addColorStop(0, 'rgba(200, 220, 255, 0.8)');
+            glow.addColorStop(0.5, 'rgba(150, 180, 255, 0.3)');
+            glow.addColorStop(1, 'rgba(100, 150, 255, 0)');
+            
+            starCtx.beginPath();
+            starCtx.arc(x, y, size * 3, 0, Math.PI * 2);
+            starCtx.fillStyle = glow;
+            starCtx.fill();
+        }
+        
+        starField = starFieldCanvas;
+    }
 
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        // Update receptacle position
-        receptacle.x = receptacle.xPct * canvas.width;
-        receptacle.y = receptacle.yPct * canvas.height;
-        // Initialize/update sphere positions
+        
+        // Regenerate star field on resize
+        generateStarField();
+        
+        // Calculate center point for orbits
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const orbitScale = Math.min(canvas.width, canvas.height);
+        
+        // Initialize sphere orbital positions
         for (const sphere of spheres) {
-            if (!sphere.isDocked && sphere !== draggedSphere) {
-                sphere.x = sphere.xPct * canvas.width;
-                sphere.y = sphere.yPct * canvas.height;
+            sphere.orbitCenterX = centerX;
+            sphere.orbitCenterY = centerY;
+            sphere.orbitScale = orbitScale;
+            
+            // Calculate initial position from orbital parameters
+            if (!sphere.x) {
+                updateSphereOrbitalPosition(sphere);
             }
         }
     }
+    
+    // Calculate position on elliptical orbit
+    function updateSphereOrbitalPosition(sphere) {
+        const a = sphere.semiMajorAxis * sphere.orbitScale;  // Semi-major axis
+        const e = sphere.eccentricity;
+        const b = a * Math.sqrt(1 - e * e);  // Semi-minor axis
+        
+        // Kepler's equation: vary angular velocity based on distance (faster near perihelion)
+        const r = a * (1 - e * e) / (1 + e * Math.cos(sphere.angle));
+        const keplerFactor = (a / r) * (a / r);  // Speed up when closer
+        
+        sphere.currentAngularVelocity = sphere.baseAngularVelocity * Math.sqrt(keplerFactor);
+        
+        // Position on tilted ellipse
+        const cosT = Math.cos(sphere.orbitTilt);
+        const sinT = Math.sin(sphere.orbitTilt);
+        const x = a * Math.cos(sphere.angle);
+        const y = b * Math.sin(sphere.angle);
+        
+        sphere.x = sphere.orbitCenterX + x * cosT - y * sinT;
+        sphere.y = sphere.orbitCenterY + x * sinT + y * cosT;
+    }
 
-    // Find sphere at position (excluding docked sphere)
-    function getSphereAtPosition(x, y, includeDocked = true) {
+    // Find sphere at position
+    function getSphereAtPosition(x, y) {
         for (let i = spheres.length - 1; i >= 0; i--) {
             const sphere = spheres[i];
-            if (!includeDocked && sphere === dockedSphere) continue;
             const dx = x - sphere.x;
             const dy = y - sphere.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
-            if (distance <= sphere.radius) {
+            if (distance <= sphere.radius + 5) {  // Small hit area buffer
                 return sphere;
             }
         }
         return null;
-    }
-
-    // Check if position is in receptacle
-    function isInReceptacle(x, y) {
-        const dx = x - receptacle.x;
-        const dy = y - receptacle.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        return distance < receptacle.radius;
     }
 
     // Show content panel
@@ -124,53 +264,41 @@ function initPuzzleNavigation() {
         if (hintText) hintText.classList.remove('hidden');
     }
 
-    // Dock sphere to receptacle
-    function dockSphere(sphere) {
-        // If another sphere is docked, undock it first
-        if (dockedSphere && dockedSphere !== sphere) {
-            undockSphere(dockedSphere);
-        }
-
-        dockedSphere = sphere;
-        sphere.isDocked = true;
-
-        // Snap to receptacle center
-        sphere.x = receptacle.x;
-        sphere.y = receptacle.y;
-        sphere.xPct = receptacle.xPct;
-        sphere.yPct = receptacle.yPct;
-
-        showContentPanel(sphere.sectionId);
-    }
-
-    // Undock sphere from receptacle
-    function undockSphere(sphere) {
-        if (sphere !== dockedSphere) return;
-
-        dockedSphere = null;
-        sphere.isDocked = false;
-
-        // Return to home position
-        sphere.xPct = sphere.homeX;
-        sphere.yPct = sphere.homeY;
-
-        hideContentPanel();
-    }
-
     // Mouse handlers
     function handleDocumentMouseMove(e) {
         const x = e.clientX;
         const y = e.clientY;
 
         if (isDragging && draggedSphere) {
-            draggedSphere.x = x;
-            draggedSphere.y = y;
-            draggedSphere.xPct = x / canvas.width;
-            draggedSphere.yPct = y / canvas.height;
-
-            // Check if dragging out of receptacle
-            if (draggedSphere.isDocked && !isInReceptacle(x, y)) {
-                undockSphere(draggedSphere);
+            // Apply drag with spring resistance toward orbit
+            const targetX = x;
+            const targetY = y;
+            
+            // Calculate orbital anchor position (where sphere would be on orbit)
+            const tempAngle = dragAnchorAngle + (Date.now() - mouseDownTime) * draggedSphere.baseAngularVelocity * 0.001;
+            const a = draggedSphere.semiMajorAxis * draggedSphere.orbitScale;
+            const e_val = draggedSphere.eccentricity;
+            const b = a * Math.sqrt(1 - e_val * e_val);
+            const cosT = Math.cos(draggedSphere.orbitTilt);
+            const sinT = Math.sin(draggedSphere.orbitTilt);
+            const ox = a * Math.cos(tempAngle);
+            const oy = b * Math.sin(tempAngle);
+            const anchorX = draggedSphere.orbitCenterX + ox * cosT - oy * sinT;
+            const anchorY = draggedSphere.orbitCenterY + ox * sinT + oy * cosT;
+            
+            // Spring force toward anchor (resistance)
+            const dx = targetX - anchorX;
+            const dy = targetY - anchorY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const maxDrag = 150;  // Maximum distance sphere can be pulled from orbit
+            
+            if (dist > maxDrag) {
+                // Limit drag distance
+                draggedSphere.x = anchorX + (dx / dist) * maxDrag;
+                draggedSphere.y = anchorY + (dy / dist) * maxDrag;
+            } else {
+                draggedSphere.x = targetX;
+                draggedSphere.y = targetY;
             }
 
             e.preventDefault();
@@ -178,10 +306,10 @@ function initPuzzleNavigation() {
             // Check hover state
             hoveredSphere = getSphereAtPosition(x, y);
 
-            if (hoveredSphere || isInReceptacle(x, y)) {
+            if (hoveredSphere) {
                 canvas.style.pointerEvents = 'auto';
-                canvas.style.cursor = hoveredSphere ? 'grab' : 'default';
-                document.body.style.cursor = hoveredSphere ? 'grab' : '';
+                canvas.style.cursor = 'pointer';
+                document.body.style.cursor = 'pointer';
             } else {
                 canvas.style.pointerEvents = 'none';
                 canvas.style.cursor = 'default';
@@ -196,8 +324,11 @@ function initPuzzleNavigation() {
 
         const sphere = getSphereAtPosition(x, y);
         if (sphere) {
-            isDragging = true;
+            mouseDownTime = Date.now();
+            mouseDownX = x;
+            mouseDownY = y;
             draggedSphere = sphere;
+            dragAnchorAngle = sphere.angle;
             canvas.style.cursor = 'grabbing';
             document.body.style.cursor = 'grabbing';
             e.preventDefault();
@@ -205,13 +336,19 @@ function initPuzzleNavigation() {
     }
 
     function handleDocumentMouseUp(e) {
-        if (isDragging && draggedSphere) {
+        if (draggedSphere) {
             const x = e.clientX;
             const y = e.clientY;
-
-            // Check if dropped in receptacle
-            if (isInReceptacle(x, y) && !draggedSphere.isDocked) {
-                dockSphere(draggedSphere);
+            const timeDelta = Date.now() - mouseDownTime;
+            const distDelta = Math.sqrt((x - mouseDownX) ** 2 + (y - mouseDownY) ** 2);
+            
+            // Check if this was a click (not a drag)
+            if (timeDelta < CLICK_TIME_THRESHOLD && distDelta < CLICK_DISTANCE_THRESHOLD) {
+                // It's a click - open the section
+                showContentPanel(draggedSphere.sectionId);
+            } else if (isDragging) {
+                // It was a drag - recalculate orbit from new position
+                recalculateOrbitFromPosition(draggedSphere);
             }
 
             isDragging = false;
@@ -219,6 +356,45 @@ function initPuzzleNavigation() {
             canvas.style.cursor = 'default';
             document.body.style.cursor = '';
         }
+    }
+    
+    // Check if dragging has started (movement threshold)
+    function checkDragStart(x, y) {
+        if (draggedSphere && !isDragging) {
+            const distDelta = Math.sqrt((x - mouseDownX) ** 2 + (y - mouseDownY) ** 2);
+            const timeDelta = Date.now() - mouseDownTime;
+            if (distDelta >= CLICK_DISTANCE_THRESHOLD || timeDelta >= CLICK_TIME_THRESHOLD) {
+                isDragging = true;
+            }
+        }
+    }
+    
+    // Recalculate orbital parameters after drag
+    function recalculateOrbitFromPosition(sphere) {
+        const centerX = sphere.orbitCenterX;
+        const centerY = sphere.orbitCenterY;
+        
+        // Calculate new distance from center
+        const dx = sphere.x - centerX;
+        const dy = sphere.y - centerY;
+        const newDistance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Calculate new angle
+        sphere.angle = Math.atan2(dy, dx);
+        
+        // Adjust semi-major axis based on new distance (with limits)
+        const minOrbit = 0.12;
+        const maxOrbit = 0.48;
+        const newSemiMajor = Math.max(minOrbit, Math.min(maxOrbit, newDistance / sphere.orbitScale));
+        
+        // Slightly perturb eccentricity based on drag intensity
+        const dragIntensity = Math.abs(newSemiMajor - sphere.semiMajorAxis) / sphere.semiMajorAxis;
+        sphere.eccentricity = Math.min(0.7, sphere.eccentricity + dragIntensity * 0.1);
+        
+        sphere.semiMajorAxis = newSemiMajor;
+        
+        // Clear trail when orbit changes
+        sphere.trail = [];
     }
 
     // Touch handlers for mobile
@@ -228,39 +404,48 @@ function initPuzzleNavigation() {
         const y = touch.clientY;
 
         const sphere = getSphereAtPosition(x, y);
-
         if (sphere) {
-            // On mobile, tap to select, tap receptacle to dock
-            if (selectedSphere === sphere) {
-                // Double tap to start dragging
-                isDragging = true;
-                draggedSphere = sphere;
-            } else {
-                selectedSphere = sphere;
-            }
+            mouseDownTime = Date.now();
+            mouseDownX = x;
+            mouseDownY = y;
+            draggedSphere = sphere;
+            dragAnchorAngle = sphere.angle;
             e.preventDefault();
-        } else if (isInReceptacle(x, y) && selectedSphere) {
-            // Tap receptacle with selected sphere
-            dockSphere(selectedSphere);
-            selectedSphere = null;
-            e.preventDefault();
-        } else {
-            selectedSphere = null;
         }
     }
 
     function handleTouchMove(e) {
-        if (isDragging && draggedSphere && e.touches[0]) {
+        if (draggedSphere && e.touches[0]) {
             const x = e.touches[0].clientX;
             const y = e.touches[0].clientY;
-            draggedSphere.x = x;
-            draggedSphere.y = y;
-            draggedSphere.xPct = x / canvas.width;
-            draggedSphere.yPct = y / canvas.height;
-
-            // Check if dragging out of receptacle
-            if (draggedSphere.isDocked && !isInReceptacle(x, y)) {
-                undockSphere(draggedSphere);
+            
+            checkDragStart(x, y);
+            
+            if (isDragging) {
+                // Apply drag with spring resistance (same as mouse)
+                const a = draggedSphere.semiMajorAxis * draggedSphere.orbitScale;
+                const e_val = draggedSphere.eccentricity;
+                const b = a * Math.sqrt(1 - e_val * e_val);
+                const cosT = Math.cos(draggedSphere.orbitTilt);
+                const sinT = Math.sin(draggedSphere.orbitTilt);
+                const tempAngle = dragAnchorAngle + (Date.now() - mouseDownTime) * draggedSphere.baseAngularVelocity * 0.001;
+                const ox = a * Math.cos(tempAngle);
+                const oy = b * Math.sin(tempAngle);
+                const anchorX = draggedSphere.orbitCenterX + ox * cosT - oy * sinT;
+                const anchorY = draggedSphere.orbitCenterY + ox * sinT + oy * cosT;
+                
+                const dx = x - anchorX;
+                const dy = y - anchorY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const maxDrag = 150;
+                
+                if (dist > maxDrag) {
+                    draggedSphere.x = anchorX + (dx / dist) * maxDrag;
+                    draggedSphere.y = anchorY + (dy / dist) * maxDrag;
+                } else {
+                    draggedSphere.x = x;
+                    draggedSphere.y = y;
+                }
             }
 
             e.preventDefault();
@@ -268,13 +453,17 @@ function initPuzzleNavigation() {
     }
 
     function handleTouchEnd(e) {
-        if (isDragging && draggedSphere) {
-            // Use the last known position
+        if (draggedSphere) {
+            const timeDelta = Date.now() - mouseDownTime;
             const x = draggedSphere.x;
             const y = draggedSphere.y;
-
-            if (isInReceptacle(x, y) && !draggedSphere.isDocked) {
-                dockSphere(draggedSphere);
+            const distDelta = Math.sqrt((x - mouseDownX) ** 2 + (y - mouseDownY) ** 2);
+            
+            // Check if this was a tap (not a drag)
+            if (timeDelta < CLICK_TIME_THRESHOLD && distDelta < CLICK_DISTANCE_THRESHOLD) {
+                showContentPanel(draggedSphere.sectionId);
+            } else if (isDragging) {
+                recalculateOrbitFromPosition(draggedSphere);
             }
 
             isDragging = false;
@@ -285,22 +474,21 @@ function initPuzzleNavigation() {
     // Panel close handlers
     if (panelClose) {
         panelClose.addEventListener('click', () => {
-            if (dockedSphere) {
-                undockSphere(dockedSphere);
-            }
+            hideContentPanel();
         });
     }
 
     if (panelBackdrop) {
         panelBackdrop.addEventListener('click', () => {
-            if (dockedSphere) {
-                undockSphere(dockedSphere);
-            }
+            hideContentPanel();
         });
     }
 
     // Event listeners
-    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mousemove', (e) => {
+        checkDragStart(e.clientX, e.clientY);
+        handleDocumentMouseMove(e);
+    });
     document.addEventListener('mouseup', handleDocumentMouseUp);
     canvas.addEventListener('mousedown', handleCanvasMouseDown);
 
@@ -309,31 +497,22 @@ function initPuzzleNavigation() {
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
     document.addEventListener('touchend', handleTouchEnd);
 
-    // Grid displacement calculations
+    // Grid displacement calculations - simplified for space theme
     function getDisplacement(px, py, sphere) {
         const dx = px - sphere.x;
         const dy = py - sphere.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        // Extend effect radius based on press depth for gravity well effect
-        const effectRadius = sphere.depth * (1 + (sphere.pressDepth - 1) * 0.5);
+        const effectRadius = sphere.radius * 4;
 
         if (distance < effectRadius && distance > 0) {
             const factor = 1 - (distance / effectRadius);
-
-            // INVERTED: Pressing DOWN increases warping (gravity well effect)
-            // pressDepth animates from 1.0 (resting) to 3.0 (pressed)
-            let warpMultiplier = sphere.pressDepth;
-            if (sphere === hoveredSphere && sphere !== draggedSphere) {
-                warpMultiplier = 1.3; // Slight preview of press effect on hover
-            }
-
-            const strength = factor * factor * sphere.depth * 0.5 * warpMultiplier;
+            const strength = factor * factor * sphere.radius * 0.3;
             const dirX = dx / distance;
             const dirY = dy / distance;
 
             return {
-                x: -dirX * strength * 0.5,
-                y: -dirY * strength * 0.5 + strength * 0.35
+                x: -dirX * strength * 0.3,
+                y: -dirY * strength * 0.3
             };
         }
         return { x: 0, y: 0 };
@@ -363,7 +542,7 @@ function initPuzzleNavigation() {
         // Draw horizontal lines
         for (let y = 0; y <= height + gridSpacing; y += gridSpacing) {
             ctx.beginPath();
-            for (let x = 0; x <= width; x += 4) {
+            for (let x = 0; x <= width; x += 8) {
                 const d = getTotalDisplacement(x, y);
                 const newX = x + d.x;
                 const newY = y + d.y;
@@ -380,7 +559,7 @@ function initPuzzleNavigation() {
         // Draw vertical lines
         for (let x = 0; x <= width + gridSpacing; x += gridSpacing) {
             ctx.beginPath();
-            for (let y = 0; y <= height; y += 4) {
+            for (let y = 0; y <= height; y += 8) {
                 const d = getTotalDisplacement(x, y);
                 const newX = x + d.x;
                 const newY = y + d.y;
@@ -394,411 +573,330 @@ function initPuzzleNavigation() {
             ctx.stroke();
         }
     }
-
-    function drawReceptacle() {
-        const { x, y, radius } = receptacle;
-        const pulse = Math.sin(receptacle.pulsePhase) * 0.15 + 1;
-        const currentRadius = radius * pulse;
-
+    
+    // Draw central star
+    function drawCentralStar() {
+        const x = canvas.width / 2;
+        const y = canvas.height / 2;
+        const pulse = Math.sin(centralStar.pulsePhase) * 0.05 + 1;
+        const radius = centralStar.baseRadius * pulse;
+        
         // Outer glow
-        const glowGradient = ctx.createRadialGradient(x, y, currentRadius * 0.5, x, y, currentRadius * 1.5);
-        glowGradient.addColorStop(0, 'rgba(255, 107, 0, 0.05)');
-        glowGradient.addColorStop(0.5, 'rgba(0, 212, 255, 0.08)');
-        glowGradient.addColorStop(1, 'rgba(0, 212, 255, 0)');
-
+        const outerGlow = ctx.createRadialGradient(x, y, 0, x, y, radius * 3);
+        outerGlow.addColorStop(0, 'rgba(255, 200, 100, 0.15)');
+        outerGlow.addColorStop(0.3, 'rgba(255, 150, 50, 0.08)');
+        outerGlow.addColorStop(0.6, 'rgba(255, 100, 0, 0.03)');
+        outerGlow.addColorStop(1, 'rgba(255, 80, 0, 0)');
+        
         ctx.beginPath();
-        ctx.arc(x, y, currentRadius * 1.5, 0, Math.PI * 2);
-        ctx.fillStyle = glowGradient;
+        ctx.arc(x, y, radius * 3, 0, Math.PI * 2);
+        ctx.fillStyle = outerGlow;
         ctx.fill();
-
-        // Main ring
+        
+        // Core glow
+        const coreGlow = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        coreGlow.addColorStop(0, 'rgba(255, 250, 230, 0.9)');
+        coreGlow.addColorStop(0.3, 'rgba(255, 220, 150, 0.7)');
+        coreGlow.addColorStop(0.6, 'rgba(255, 180, 80, 0.4)');
+        coreGlow.addColorStop(1, 'rgba(255, 140, 40, 0)');
+        
         ctx.beginPath();
-        ctx.arc(x, y, currentRadius, 0, Math.PI * 2);
-        ctx.strokeStyle = dockedSphere ? 'rgba(0, 255, 136, 0.6)' : 'rgba(0, 212, 255, 0.4)';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        // Inner ring
-        ctx.beginPath();
-        ctx.arc(x, y, currentRadius * 0.7, 0, Math.PI * 2);
-        ctx.strokeStyle = dockedSphere ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 107, 0, 0.3)';
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = coreGlow;
+        ctx.fill();
+    }
+    
+    // Draw orbital trail for a sphere
+    function drawTrail(sphere) {
+        if (sphere.trail.length < 2) return;
+        
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        for (let i = 1; i < sphere.trail.length; i++) {
+            const prev = sphere.trail[i - 1];
+            const curr = sphere.trail[i];
+            const progress = i / sphere.trail.length;  // 0 at tail, 1 at head
+            const alpha = progress * 0.35;  // Fade from 0 to 35% max
+            const lineWidth = 1 + progress * 3;  // Taper from 1px to 4px
+            
+            ctx.beginPath();
+            ctx.moveTo(prev.x, prev.y);
+            ctx.lineTo(curr.x, curr.y);
+            ctx.strokeStyle = `rgba(${hexToRgb(sphere.colors.mid)}, ${alpha})`;
+            ctx.lineWidth = lineWidth;
+            ctx.stroke();
+        }
+    }
+    
+    // Draw projected orbit path (dotted ellipse)
+    function drawOrbitPath(sphere) {
+        const centerX = sphere.orbitCenterX;
+        const centerY = sphere.orbitCenterY;
+        const a = sphere.semiMajorAxis * sphere.orbitScale;  // Semi-major axis
+        const e = sphere.eccentricity;
+        const b = a * Math.sqrt(1 - e * e);  // Semi-minor axis
+        const tilt = sphere.orbitTilt;
+        
+        ctx.strokeStyle = `rgba(${hexToRgb(sphere.colors.dark)}, 0.25)`;
         ctx.lineWidth = 1;
-        ctx.stroke();
-
-        // Corner markers
-        const markerSize = 15;
-        ctx.strokeStyle = dockedSphere ? 'rgba(0, 255, 136, 0.8)' : 'rgba(255, 107, 0, 0.6)';
-        ctx.lineWidth = 2;
-
-        // Top-left
+        ctx.setLineDash([4, 8]);  // Dotted line pattern
+        
         ctx.beginPath();
-        ctx.moveTo(x - currentRadius, y - currentRadius + markerSize);
-        ctx.lineTo(x - currentRadius, y - currentRadius);
-        ctx.lineTo(x - currentRadius + markerSize, y - currentRadius);
+        
+        // Draw ellipse by plotting points
+        const steps = 60;
+        for (let i = 0; i <= steps; i++) {
+            const angle = (i / steps) * Math.PI * 2;
+            const cosT = Math.cos(tilt);
+            const sinT = Math.sin(tilt);
+            const x = a * Math.cos(angle);
+            const y = b * Math.sin(angle);
+            
+            const rotatedX = centerX + x * cosT - y * sinT;
+            const rotatedY = centerY + x * sinT + y * cosT;
+            
+            if (i === 0) {
+                ctx.moveTo(rotatedX, rotatedY);
+            } else {
+                ctx.lineTo(rotatedX, rotatedY);
+            }
+        }
+        
+        ctx.closePath();
         ctx.stroke();
-
-        // Top-right
-        ctx.beginPath();
-        ctx.moveTo(x + currentRadius - markerSize, y - currentRadius);
-        ctx.lineTo(x + currentRadius, y - currentRadius);
-        ctx.lineTo(x + currentRadius, y - currentRadius + markerSize);
-        ctx.stroke();
-
-        // Bottom-left
-        ctx.beginPath();
-        ctx.moveTo(x - currentRadius, y + currentRadius - markerSize);
-        ctx.lineTo(x - currentRadius, y + currentRadius);
-        ctx.lineTo(x - currentRadius + markerSize, y + currentRadius);
-        ctx.stroke();
-
-        // Bottom-right
-        ctx.beginPath();
-        ctx.moveTo(x + currentRadius - markerSize, y + currentRadius);
-        ctx.lineTo(x + currentRadius, y + currentRadius);
-        ctx.lineTo(x + currentRadius, y + currentRadius - markerSize);
-        ctx.stroke();
+        ctx.setLineDash([]);  // Reset to solid line
+    }
+    
+    // Helper to convert hex to rgb
+    function hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? 
+            `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : 
+            '255, 255, 255';
     }
 
     function drawSphere(sphere) {
-        const { x, y } = sphere;
+        const { x, y, radius, colors } = sphere;
         const isHovered = sphere === hoveredSphere;
-        const isSelected = sphere === selectedSphere;
-        const isDocked = sphere === dockedSphere;
         const isDragged = sphere === draggedSphere;
 
-        // Calculate press intensity (0 = normal, 1 = fully pressed)
-        const pressIntensity = Math.max(0, (sphere.pressDepth - 1) / 2);
+        // Scale up slightly when hovered
+        const scaleMultiplier = isHovered ? 1.15 : 1.0;
+        const drawRadius = radius * scaleMultiplier;
 
-        // Scale DOWN slightly when pressed (pushed into surface)
-        // Scale up slightly when hovered (preview)
-        const scaleMultiplier = isDragged ? (1.0 - pressIntensity * 0.08) : (isHovered ? 1.05 : 1.0);
-        const radius = sphere.radius * scaleMultiplier;
-
-        // Depression ring effect when pressed (shows the gravity well)
-        if (pressIntensity > 0.1) {
-            const ringCount = 3;
-            for (let i = 0; i < ringCount; i++) {
-                const ringRadius = radius * (1.5 + i * 0.6) * (1 + pressIntensity * 0.5);
-                const ringOpacity = 0.15 * pressIntensity * (1 - i / ringCount);
-
-                ctx.beginPath();
-                ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
-                ctx.strokeStyle = `rgba(74, 98, 120, ${ringOpacity})`;
-                ctx.lineWidth = 2 - i * 0.5;
-                ctx.stroke();
-            }
-        }
-
-        // Inner glow/depression effect when pressed (darker, pulled into surface)
-        if (isDragged && pressIntensity > 0.2) {
-            const pressGlow = ctx.createRadialGradient(x, y, radius * 0.5, x, y, radius * 2.5);
-            pressGlow.addColorStop(0, `rgba(74, 98, 120, ${0.2 * pressIntensity})`);
-            pressGlow.addColorStop(0.5, `rgba(61, 82, 102, ${0.1 * pressIntensity})`);
-            pressGlow.addColorStop(1, 'rgba(61, 82, 102, 0)');
-
+        // Highlight ring for hovered
+        if (isHovered && !isDragged) {
             ctx.beginPath();
-            ctx.arc(x, y, radius * 2.5, 0, Math.PI * 2);
-            ctx.fillStyle = pressGlow;
-            ctx.fill();
-        }
-
-        // Highlight ring for hovered/selected (but not when pressed deep)
-        if ((isHovered || isSelected) && !isDragged) {
-            ctx.beginPath();
-            ctx.arc(x, y, radius + 8, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 107, 0, 0.5)';
-            ctx.lineWidth = 3;
+            ctx.arc(x, y, drawRadius + 6, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 2;
             ctx.stroke();
         }
 
-        // Drop shadow - SMALLER and TIGHTER when pressed (pushed into surface)
-        // Normal/larger when resting
-        const shadowOffset = isDragged ? (2 * (1 - pressIntensity)) : (isHovered ? 4 : 3);
-        const shadowSize = isDragged ? (1.2 - pressIntensity * 0.3) : 1.4;
-        const shadowOpacity = isDragged ? (0.25 + pressIntensity * 0.15) : 0.25;
-
-        const shadowGradient = ctx.createRadialGradient(
-            x + shadowOffset * 0.5, y + shadowOffset,
-            radius * 0.3,
-            x + shadowOffset * 0.5, y + shadowOffset,
-            radius * shadowSize
-        );
-        shadowGradient.addColorStop(0, `rgba(0, 0, 0, ${shadowOpacity})`);
-        shadowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-
+        // Outer glow
+        const glowGradient = ctx.createRadialGradient(x, y, drawRadius * 0.5, x, y, drawRadius * 2);
+        glowGradient.addColorStop(0, `rgba(${hexToRgb(colors.mid)}, 0.3)`);
+        glowGradient.addColorStop(0.5, `rgba(${hexToRgb(colors.dark)}, 0.1)`);
+        glowGradient.addColorStop(1, `rgba(${hexToRgb(colors.shadow)}, 0)`);
+        
         ctx.beginPath();
-        ctx.arc(x + shadowOffset * 0.5, y + shadowOffset, radius * shadowSize, 0, Math.PI * 2);
-        ctx.fillStyle = shadowGradient;
-        ctx.globalCompositeOperation = 'multiply';
+        ctx.arc(x, y, drawRadius * 2, 0, Math.PI * 2);
+        ctx.fillStyle = glowGradient;
         ctx.fill();
-        ctx.globalCompositeOperation = 'source-over';
 
-        // Main sphere gradient - DARKER when pressed (pushed into shadow)
-        const highlightOffset = isDragged ? 0.15 + pressIntensity * 0.15 : 0.3;
+        // Main sphere gradient
         const gradient = ctx.createRadialGradient(
-            x - radius * highlightOffset, y - radius * highlightOffset, 0,
-            x, y, radius
+            x - drawRadius * 0.3, y - drawRadius * 0.3, 0,
+            x, y, drawRadius
         );
-
-        if (isDragged) {
-            // Darker, more shadowed appearance when pressed
-            const darkFactor = pressIntensity;
-            gradient.addColorStop(0, `rgb(${Math.round(255 - 60 * darkFactor)}, ${Math.round(255 - 50 * darkFactor)}, ${Math.round(255 - 40 * darkFactor)})`);
-            gradient.addColorStop(0.3, `rgb(${Math.round(154 - 40 * darkFactor)}, ${Math.round(176 - 40 * darkFactor)}, ${Math.round(196 - 40 * darkFactor)})`);
-            gradient.addColorStop(0.7, `rgb(${Math.round(74 - 20 * darkFactor)}, ${Math.round(98 - 20 * darkFactor)}, ${Math.round(120 - 20 * darkFactor)})`);
-            gradient.addColorStop(1, `rgb(${Math.round(61 - 15 * darkFactor)}, ${Math.round(82 - 15 * darkFactor)}, ${Math.round(102 - 15 * darkFactor)})`);
-        } else {
-            gradient.addColorStop(0, sphereColor.highlight);
-            gradient.addColorStop(0.3, sphereColor.mid);
-            gradient.addColorStop(0.7, sphereColor.dark);
-            gradient.addColorStop(1, sphereColor.shadow);
-        }
+        gradient.addColorStop(0, colors.highlight);
+        gradient.addColorStop(0.3, colors.mid);
+        gradient.addColorStop(0.7, colors.dark);
+        gradient.addColorStop(1, colors.shadow);
 
         // Draw sphere
         ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
         ctx.fillStyle = gradient;
         ctx.fill();
 
-        // Rim - darker/shadowed when pressed, normal otherwise
+        // Rim highlight
         ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
-        if (isDragged) {
-            // Darker rim when pressed (shadowed edge)
-            ctx.strokeStyle = `rgba(61, 82, 102, ${0.4 + pressIntensity * 0.3})`;
-            ctx.lineWidth = 2 + pressIntensity;
-        } else if (isDocked) {
-            ctx.strokeStyle = 'rgba(0, 255, 136, 0.3)';
-            ctx.lineWidth = 2;
-        } else {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-            ctx.lineWidth = 2;
-        }
+        ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${isHovered ? 0.4 : 0.2})`;
+        ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Draw label (always on mobile, on hover/select/dock/drag for desktop)
-        if (isMobile || isHovered || isSelected || isDocked || isDragged) {
+        // Draw label on hover
+        if (isHovered || isMobile) {
             drawSphereLabel(sphere, scaleMultiplier);
         }
     }
 
     function drawSphereLabel(sphere, scaleMultiplier = 1) {
-        const { x, y, label } = sphere;
-        const radius = sphere.radius * scaleMultiplier;
+        const { x, y, label, radius } = sphere;
+        const drawRadius = radius * scaleMultiplier;
 
         ctx.font = '600 11px "Fira Code", monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        const labelY = y + radius + 20;
+        const labelY = y + drawRadius + 18;
         const padding = 6;
         const textWidth = ctx.measureText(label.toUpperCase()).width;
 
-        // Label background
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        // Label background - dark for space theme
+        ctx.fillStyle = 'rgba(10, 10, 30, 0.85)';
         ctx.fillRect(x - textWidth/2 - padding, labelY - 8, textWidth + padding * 2, 16);
 
         // Label border
-        ctx.strokeStyle = 'rgba(160, 184, 208, 0.5)';
+        ctx.strokeStyle = 'rgba(100, 150, 200, 0.4)';
         ctx.lineWidth = 1;
         ctx.strokeRect(x - textWidth/2 - padding, labelY - 8, textWidth + padding * 2, 16);
 
         // Label text
-        ctx.fillStyle = '#4a5a6a';
+        ctx.fillStyle = '#a0c0e0';
         ctx.fillText(label.toUpperCase(), x, labelY);
     }
 
-    // Physics: Apply gravity attraction from pressed sphere
-    function applyGravityFromPressedSphere(sphere, pressedSphere) {
-        const dx = pressedSphere.x - sphere.x;
-        const dy = pressedSphere.y - sphere.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        // Prevent division by zero and don't apply gravity when too close
-        if (distance < 10) return;
-
-        // Gravity strength based on press depth and inverse square-ish law
-        const gravityStrength = (pressedSphere.pressDepth - 1) * 0.8;
-        const force = gravityStrength / Math.max(distance * 0.02, 1);
-
-        // Apply force as acceleration (normalize direction)
-        sphere.vx += (dx / distance) * force;
-        sphere.vy += (dy / distance) * force;
-    }
-
-    // Physics: Handle sphere-to-sphere collisions
-    function handleSphereCollisions() {
-        for (let i = 0; i < spheres.length; i++) {
-            for (let j = i + 1; j < spheres.length; j++) {
-                const a = spheres[i];
-                const b = spheres[j];
-
-                // Skip if both are docked (shouldn't happen) or both dragged
-                if (a.isDocked && b.isDocked) continue;
-
-                const dx = b.x - a.x;
-                const dy = b.y - a.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                const minDist = a.radius + b.radius;
-
-                if (distance < minDist && distance > 0) {
-                    // Collision detected - push spheres apart
-                    const overlap = minDist - distance;
-                    const nx = dx / distance;
-                    const ny = dy / distance;
-
-                    // Move spheres apart (don't move dragged or docked spheres)
-                    const aMovable = a !== draggedSphere && !a.isDocked;
-                    const bMovable = b !== draggedSphere && !b.isDocked;
-
-                    if (aMovable && bMovable) {
-                        // Both can move - split the overlap
-                        a.x -= nx * overlap * 0.5;
-                        a.y -= ny * overlap * 0.5;
-                        b.x += nx * overlap * 0.5;
-                        b.y += ny * overlap * 0.5;
-
-                        // Elastic collision - exchange velocities along collision normal
-                        const relVelX = b.vx - a.vx;
-                        const relVelY = b.vy - a.vy;
-                        const relVelDotNormal = relVelX * nx + relVelY * ny;
-
-                        // Only resolve if spheres are moving toward each other
-                        if (relVelDotNormal < 0) {
-                            const restitution = 0.2; // Low bounciness - spheres settle quickly
-                            const impulse = -(1 + restitution) * relVelDotNormal * 0.5;
-
-                            a.vx -= impulse * nx;
-                            a.vy -= impulse * ny;
-                            b.vx += impulse * nx;
-                            b.vy += impulse * ny;
-                        }
-                    } else if (aMovable) {
-                        // Only A can move
-                        a.x -= nx * overlap;
-                        a.y -= ny * overlap;
-
-                        // Bounce off the immovable sphere
-                        const velDotNormal = a.vx * nx + a.vy * ny;
-                        if (velDotNormal > 0) {
-                            a.vx -= 1.4 * velDotNormal * nx;
-                            a.vy -= 1.4 * velDotNormal * ny;
-                        }
-                    } else if (bMovable) {
-                        // Only B can move
-                        b.x += nx * overlap;
-                        b.y += ny * overlap;
-
-                        // Bounce off the immovable sphere
-                        const velDotNormal = b.vx * (-nx) + b.vy * (-ny);
-                        if (velDotNormal > 0) {
-                            b.vx += 1.4 * velDotNormal * nx;
-                            b.vy += 1.4 * velDotNormal * ny;
-                        }
-                    }
-                }
-            }
+    // Physics: Apply soft boundary force near edges
+    function applySoftBoundaryForce(sphere) {
+        const margin = 60;
+        const strength = 0.5;
+        
+        // Left edge
+        if (sphere.x < margin) {
+            sphere.vx += (margin - sphere.x) * strength * 0.1;
+        }
+        // Right edge
+        if (sphere.x > canvas.width - margin) {
+            sphere.vx -= (sphere.x - (canvas.width - margin)) * strength * 0.1;
+        }
+        // Top edge
+        if (sphere.y < margin) {
+            sphere.vy += (margin - sphere.y) * strength * 0.1;
+        }
+        // Bottom edge
+        if (sphere.y > canvas.height - margin) {
+            sphere.vy -= (sphere.y - (canvas.height - margin)) * strength * 0.1;
         }
     }
 
-    // Physics: Keep spheres within canvas bounds
+    // Physics: Keep spheres within canvas bounds (hard constraint)
     function constrainSpheresToCanvas() {
         for (const sphere of spheres) {
-            if (sphere === draggedSphere || sphere.isDocked) continue;
+            if (sphere === draggedSphere) continue;
 
             const margin = sphere.radius;
 
             // Left bound
             if (sphere.x < margin) {
                 sphere.x = margin;
-                sphere.vx *= -0.5;
+                sphere.vx *= -0.3;
             }
             // Right bound
             if (sphere.x > canvas.width - margin) {
                 sphere.x = canvas.width - margin;
-                sphere.vx *= -0.5;
+                sphere.vx *= -0.3;
             }
             // Top bound
             if (sphere.y < margin) {
                 sphere.y = margin;
-                sphere.vy *= -0.5;
+                sphere.vy *= -0.3;
             }
             // Bottom bound
             if (sphere.y > canvas.height - margin) {
                 sphere.y = canvas.height - margin;
-                sphere.vy *= -0.5;
+                sphere.vy *= -0.3;
             }
         }
     }
 
-    // Physics: Main update function
-    function updatePhysics() {
-        // Animate pressDepth for dragged sphere
+    // Physics: Update orbital motion
+    function updateOrbitalMotion() {
         for (const sphere of spheres) {
-            if (sphere === draggedSphere) {
-                // Animate toward pressed state (3.0)
-                sphere.pressDepth += (3.0 - sphere.pressDepth) * 0.15;
-            } else {
-                // Animate back to resting state (1.0)
-                sphere.pressDepth += (1.0 - sphere.pressDepth) * 0.1;
+            if (sphere === draggedSphere) continue;
+            
+            // Update orbit center in case of resize
+            sphere.orbitCenterX = canvas.width / 2;
+            sphere.orbitCenterY = canvas.height / 2;
+            sphere.orbitScale = Math.min(canvas.width, canvas.height);
+            
+            // Apply energy dampening (orbits slowly stabilize)
+            sphere.eccentricity *= 0.9997;
+            if (sphere.eccentricity < 0.05) sphere.eccentricity = 0.05 + Math.random() * 0.1;
+            
+            // Update angle based on Kepler-adjusted angular velocity
+            sphere.angle += sphere.currentAngularVelocity || sphere.baseAngularVelocity;
+            
+            // Keep angle in bounds
+            if (sphere.angle > Math.PI * 2) sphere.angle -= Math.PI * 2;
+            if (sphere.angle < 0) sphere.angle += Math.PI * 2;
+            
+            // Calculate new position
+            updateSphereOrbitalPosition(sphere);
+            
+            // Apply soft boundary forces
+            applySoftBoundaryForce(sphere);
+            
+            // Add current position to trail (only every few frames to reduce density)
+            if (!sphere.trailCounter) sphere.trailCounter = 0;
+            sphere.trailCounter++;
+            if (sphere.trailCounter >= 2) {  // Add point every 2 frames
+                sphere.trail.push({ x: sphere.x, y: sphere.y });
+                sphere.trailCounter = 0;
+            }
+            
+            // Limit trail length
+            const maxTrailLength = 60;
+            if (sphere.trail.length > maxTrailLength) {
+                sphere.trail.shift();
             }
         }
-
-        // Apply physics to non-dragged, non-docked spheres
-        for (const sphere of spheres) {
-            if (sphere === draggedSphere || sphere.isDocked) continue;
-
-            // Apply gravity attraction from pressed (dragged) sphere
-            if (draggedSphere && draggedSphere.pressDepth > 1.5) {
-                applyGravityFromPressedSphere(sphere, draggedSphere);
-            }
-
-            // Apply friction/damping (higher friction so spheres settle faster)
-            sphere.vx *= 0.92;
-            sphere.vy *= 0.92;
-
-            // Stop very small velocities
-            if (Math.abs(sphere.vx) < 0.01) sphere.vx = 0;
-            if (Math.abs(sphere.vy) < 0.01) sphere.vy = 0;
-
-            // Update position based on velocity
-            sphere.x += sphere.vx;
-            sphere.y += sphere.vy;
-
-            // Update percentage position for home tracking
-            sphere.xPct = sphere.x / canvas.width;
-            sphere.yPct = sphere.y / canvas.height;
-        }
-
-        // Handle collisions between spheres
-        handleSphereCollisions();
-
-        // Keep spheres in bounds
+        
+        // Hard boundary constraints
         constrainSpheresToCanvas();
     }
 
     function updateSpherePositions() {
-        // Only run physics simulation - no floating animation
-        updatePhysics();
+        updateOrbitalMotion();
     }
 
     function draw() {
-        // Clear canvas
-        ctx.fillStyle = '#e8eef5';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Clear the entire canvas first
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw star field background
+        if (starField) {
+            ctx.drawImage(starField, 0, 0);
+        } else {
+            ctx.fillStyle = '#0a0a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
 
         // Update time
         time += 16;
-        receptacle.pulsePhase += 0.03;
+        centralStar.pulsePhase += 0.02;
 
         // Update positions
         updateSpherePositions();
 
-        // Draw warped grid
+        // Draw subtle warped grid
         drawGrid();
-
-        // Draw receptacle
-        drawReceptacle();
+        
+        // Draw central star
+        drawCentralStar();
+        
+        // Draw projected orbit paths (dotted ellipses)
+        for (const sphere of spheres) {
+            drawOrbitPath(sphere);
+        }
+        
+        // Draw trails (behind spheres)
+        for (const sphere of spheres) {
+            drawTrail(sphere);
+        }
 
         // Draw spheres
         for (const sphere of spheres) {

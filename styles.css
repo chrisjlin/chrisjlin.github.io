@@ -1,19 +1,19 @@
 /* ===================================
-   Wipeout Pure Inspired Theme
-   Blueprint / Technical / Futuristic
+   Space Theme - Solar System Navigation
+   Dark / Cosmic / Orbital
    =================================== */
 :root {
-    /* Colors - Light Blueprint Theme */
-    --bg-primary: #e8eef5;
-    --bg-secondary: #dce5f0;
-    --bg-tertiary: #f0f4f8;
-    --bg-card: #ffffff;
-    --bg-grid: #d0dae8;
+    /* Colors - Space Theme */
+    --bg-primary: #0a0a1a;
+    --bg-secondary: #0d0d24;
+    --bg-tertiary: #12122a;
+    --bg-card: rgba(20, 20, 50, 0.95);
+    --bg-grid: #1a1a3a;
 
     /* Text Colors */
-    --text-primary: #1a2a3a;
-    --text-secondary: #4a5a6a;
-    --text-muted: #7a8a9a;
+    --text-primary: #e8f0ff;
+    --text-secondary: #a0b8d0;
+    --text-muted: #6080a0;
 
     /* Accent Colors - Wipeout Neon */
     --accent-primary: #ff6b00;
@@ -24,9 +24,9 @@
     --accent-red: #ff3355;
 
     /* Blueprint Colors */
-    --blueprint-line: #a0b8d0;
-    --blueprint-grid: rgba(160, 184, 208, 0.3);
-    --blueprint-accent: #0066cc;
+    --blueprint-line: #2a3a5a;
+    --blueprint-grid: rgba(40, 60, 100, 0.2);
+    --blueprint-accent: #00aaff;
 
     /* Fonts */
     --font-mono: 'Fira Code', 'Consolas', 'Monaco', monospace;
@@ -112,27 +112,31 @@ body {
     font-family: var(--font-mono);
     font-size: 0.9rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.15em;
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 8px 16px;
-    background-color: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--blueprint-line);
+    padding: 10px 18px;
+    background: linear-gradient(135deg, rgba(20, 20, 40, 0.9) 0%, rgba(10, 10, 25, 0.95) 100%);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(100, 120, 160, 0.3);
+    border-radius: 4px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     transition: all var(--transition-fast);
 }
 
 .header-logo:hover {
-    color: var(--accent-primary);
-    border-color: var(--accent-primary);
+    color: var(--accent-secondary);
+    border-color: rgba(100, 180, 255, 0.5);
+    box-shadow: 0 4px 25px rgba(0, 100, 200, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .header-logo .prompt {
-    color: var(--accent-primary);
+    color: var(--accent-secondary);
     font-weight: 700;
+    text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
 }
 
 /* ===================================
@@ -151,11 +155,11 @@ body {
 .hint-text p {
     font-family: var(--font-mono);
     font-size: 0.8rem;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.15em;
     padding: 12px 24px;
-    background-color: rgba(255, 255, 255, 0.8);
+    background-color: rgba(10, 10, 30, 0.8);
     backdrop-filter: blur(10px);
     border: 1px solid var(--blueprint-line);
     animation: pulse-hint 2s ease-in-out infinite;
@@ -200,7 +204,7 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(232, 238, 245, 0.85);
+    background-color: rgba(5, 5, 15, 0.85);
     backdrop-filter: blur(8px);
 }
 
