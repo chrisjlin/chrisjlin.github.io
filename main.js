@@ -22,6 +22,16 @@ function initPuzzleNavigation() {
     const gridSpacing = 60;
     const gridColor = 'rgba(40, 60, 100, 0.15)';
 
+    // Isometric projection configuration for 2.5D effect
+    const perspectiveConfig = {
+        enabled: true,
+        // Isometric settings
+        tiltAngle: 0.55,             // How much to tilt the orbital plane (0 = top-down, 1 = edge-on)
+        gridLines: { horizontal: 30, vertical: 30 },  // Denser grid for better gravity visualization
+        wellDepthMultiplier: 1.8,    // Gravity well depth intensity
+        trailGrooveWidth: 8,         // Width of trail grooves
+    };
+
     // Central star settings
     const centralStar = {
         baseRadius: 70,
@@ -130,7 +140,7 @@ function initPuzzleNavigation() {
     const panelClose = document.getElementById('panel-close');
     const panelBackdrop = document.getElementById('panel-backdrop');
     const hintText = document.getElementById('hint-text');
-    
+
     // Generate star field
     function generateStarField() {
         starFieldCanvas = document.createElement('canvas');
@@ -176,14 +186,23 @@ function initPuzzleNavigation() {
         
         starField = starFieldCanvas;
     }
+    
+    // Build perspective lookup table (placeholder for future optimizations)
+    function buildPerspectiveLUT() {
+        // Currently using real-time projection calculations
+        // This function exists for potential future caching optimizations
+    }
 
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        
+
         // Regenerate star field on resize
         generateStarField();
-        
+
+        // Rebuild perspective lookup table
+        buildPerspectiveLUT();
+
         // Calculate center point for orbits
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
@@ -224,15 +243,26 @@ function initPuzzleNavigation() {
         sphere.y = sphere.orbitCenterY + x * sinT + y * cosT;
     }
 
-    // Find sphere at position
+    // Find sphere at position (uses screen coordinates when in perspective mode)
     function getSphereAtPosition(x, y) {
         for (let i = spheres.length - 1; i >= 0; i--) {
             const sphere = spheres[i];
-            const dx = x - sphere.x;
-            const dy = y - sphere.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            if (distance <= sphere.radius + 5) {  // Small hit area buffer
-                return sphere;
+
+            // Use screen coordinates if available (set during draw), otherwise use world coords
+            if (perspectiveConfig.enabled && sphere.screenX !== undefined) {
+                const dx = x - sphere.screenX;
+                const dy = y - sphere.screenY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance <= (sphere.screenRadius || sphere.radius) + 5) {
+                    return sphere;
+                }
+            } else {
+                const dx = x - sphere.x;
+                const dy = y - sphere.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance <= sphere.radius + 5) {
+                    return sphere;
+                }
             }
         }
         return null;
@@ -497,129 +527,389 @@ function initPuzzleNavigation() {
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
     document.addEventListener('touchend', handleTouchEnd);
 
-    // Grid displacement calculations - simplified for space theme
-    function getDisplacement(px, py, sphere) {
+    // Grid displacement calculations with gravity well depth
+    function getGravityWellDisplacement(px, py, sphere) {
         const dx = px - sphere.x;
         const dy = py - sphere.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        const effectRadius = sphere.radius * 4;
+        const wellRadius = sphere.radius * 6;  // Gravity influence radius
+        const maxDepth = sphere.radius * perspectiveConfig.wellDepthMultiplier * 2.5;
 
-        if (distance < effectRadius && distance > 0) {
-            const factor = 1 - (distance / effectRadius);
-            const strength = factor * factor * sphere.radius * 0.3;
-            const dirX = dx / distance;
-            const dirY = dy / distance;
-
-            return {
-                x: -dirX * strength * 0.3,
-                y: -dirY * strength * 0.3
-            };
+        if (distance >= wellRadius || distance === 0) {
+            return { x: 0, y: 0, depth: 0 };
         }
-        return { x: 0, y: 0 };
+
+        const normalizedDist = distance / wellRadius;
+
+        // Radial displacement (pulling toward center of well)
+        const pullStrength = Math.pow(1 - normalizedDist, 2) * sphere.radius * 0.8;
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+
+        // Depth calculation (inverse square falloff with smooth edge)
+        const depthFactor = Math.pow(1 - normalizedDist, 2);
+        const edgeFactor = Math.cos(normalizedDist * Math.PI * 0.5);
+        const depth = depthFactor * edgeFactor * maxDepth;
+
+        return {
+            x: -dirX * pullStrength * 0.5,
+            y: -dirY * pullStrength * 0.5,
+            depth: depth
+        };
+    }
+    
+    // Trail point displacement (smaller gravity wells along the trail)
+    function getTrailDisplacement(px, py, trailPoint, baseRadius) {
+        const dx = px - trailPoint.x;
+        const dy = py - trailPoint.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const wellRadius = baseRadius * 2.5;  // Smaller influence than planet
+        const maxDepth = baseRadius * 0.4;  // Shallower depression
+
+        if (distance >= wellRadius || distance === 0) {
+            return { x: 0, y: 0, depth: 0 };
+        }
+
+        const normalizedDist = distance / wellRadius;
+        const depthFactor = Math.pow(1 - normalizedDist, 2);
+        const depth = depthFactor * maxDepth;
+
+        return { x: 0, y: 0, depth: depth };
     }
 
     function getTotalDisplacement(px, py) {
         let totalDx = 0;
         let totalDy = 0;
+        let maxDepth = 0;
 
+        // Planet gravity wells
         for (const sphere of spheres) {
-            const d = getDisplacement(px, py, sphere);
+            // Early rejection for distant points
+            const quickDist = Math.abs(px - sphere.x) + Math.abs(py - sphere.y);
+            if (quickDist > sphere.radius * 8) continue;
+
+            const d = getGravityWellDisplacement(px, py, sphere);
             totalDx += d.x;
             totalDy += d.y;
+            maxDepth = Math.max(maxDepth, d.depth);
+            
+            // Trail groove displacement (sample every few trail points for performance)
+            if (sphere.trail && sphere.trail.length > 0) {
+                const trailStep = 3;  // Check every 3rd point
+                for (let i = 0; i < sphere.trail.length; i += trailStep) {
+                    const trailPoint = sphere.trail[i];
+                    const trailQuickDist = Math.abs(px - trailPoint.x) + Math.abs(py - trailPoint.y);
+                    if (trailQuickDist > sphere.radius * 4) continue;
+                    
+                    // Fade trail influence based on age (older = less effect)
+                    const ageFactor = (i / sphere.trail.length) * 0.7 + 0.3;
+                    const td = getTrailDisplacement(px, py, trailPoint, sphere.radius * ageFactor);
+                    maxDepth = Math.max(maxDepth, td.depth);
+                }
+            }
         }
 
-        return { x: totalDx, y: totalDy };
+        return { x: totalDx, y: totalDy, depth: maxDepth };
     }
 
     // Drawing functions
+
+    // Draw isometric grid with gravity well depressions
+    function drawPerspectiveGrid() {
+        const { horizontal: numHLines, vertical: numVLines } = perspectiveConfig.gridLines;
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        // Grid extends beyond visible area
+        const gridRadius = Math.max(canvas.width, canvas.height) * 0.8;
+        const gridSpacing = gridRadius / numHLines;
+
+        // Draw horizontal lines (these become angled lines in isometric view)
+        // In world space they're horizontal (constant Y), but we project them
+        for (let i = -numHLines; i <= numHLines; i++) {
+            const worldY = centerY + i * gridSpacing;
+
+            // Alpha fades toward edges
+            const distFromCenter = Math.abs(i) / numHLines;
+            const alpha = 0.08 + (1 - distFromCenter) * 0.12;
+
+            ctx.beginPath();
+            const segments = 60;
+            for (let j = 0; j <= segments; j++) {
+                const segT = j / segments;
+                const worldX = centerX - gridRadius + segT * gridRadius * 2;
+
+                // Get gravity well displacement
+                const d = getTotalDisplacement(worldX, worldY);
+
+                // Project to screen using isometric projection
+                const proj = projectToScreen(worldX + d.x, worldY + d.y, d.depth);
+
+                if (j === 0) {
+                    ctx.moveTo(proj.x, proj.y);
+                } else {
+                    ctx.lineTo(proj.x, proj.y);
+                }
+            }
+
+            ctx.strokeStyle = `rgba(50, 80, 130, ${alpha})`;
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+        }
+
+        // Draw vertical lines (constant X in world space)
+        for (let i = -numVLines; i <= numVLines; i++) {
+            const worldX = centerX + i * gridSpacing;
+
+            // Alpha fades toward edges
+            const distFromCenter = Math.abs(i) / numVLines;
+            const alpha = 0.08 + (1 - distFromCenter) * 0.12;
+
+            ctx.beginPath();
+            const segments = 60;
+            for (let j = 0; j <= segments; j++) {
+                const segT = j / segments;
+                const worldY = centerY - gridRadius + segT * gridRadius * 2;
+
+                // Get gravity well displacement
+                const d = getTotalDisplacement(worldX, worldY);
+
+                // Project to screen using isometric projection
+                const proj = projectToScreen(worldX + d.x, worldY + d.y, d.depth);
+
+                if (j === 0) {
+                    ctx.moveTo(proj.x, proj.y);
+                } else {
+                    ctx.lineTo(proj.x, proj.y);
+                }
+            }
+
+            ctx.strokeStyle = `rgba(50, 80, 130, ${alpha})`;
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+        }
+    }
+
+    // Legacy flat grid (kept for reference/fallback)
     function drawGrid() {
+        if (perspectiveConfig.enabled) {
+            drawPerspectiveGrid();
+            return;
+        }
+
         ctx.strokeStyle = gridColor;
         ctx.lineWidth = 1;
 
         const width = canvas.width;
         const height = canvas.height;
 
-        // Draw horizontal lines
         for (let y = 0; y <= height + gridSpacing; y += gridSpacing) {
             ctx.beginPath();
             for (let x = 0; x <= width; x += 8) {
                 const d = getTotalDisplacement(x, y);
-                const newX = x + d.x;
-                const newY = y + d.y;
-
                 if (x === 0) {
-                    ctx.moveTo(newX, newY);
+                    ctx.moveTo(x + d.x, y + d.y);
                 } else {
-                    ctx.lineTo(newX, newY);
+                    ctx.lineTo(x + d.x, y + d.y);
                 }
             }
             ctx.stroke();
         }
 
-        // Draw vertical lines
         for (let x = 0; x <= width + gridSpacing; x += gridSpacing) {
             ctx.beginPath();
             for (let y = 0; y <= height; y += 8) {
                 const d = getTotalDisplacement(x, y);
-                const newX = x + d.x;
-                const newY = y + d.y;
-
                 if (y === 0) {
-                    ctx.moveTo(newX, newY);
+                    ctx.moveTo(x + d.x, y + d.y);
                 } else {
-                    ctx.lineTo(newX, newY);
+                    ctx.lineTo(x + d.x, y + d.y);
                 }
             }
             ctx.stroke();
         }
     }
     
+    // Project a world position to screen position using isometric projection
+    // This tilts the orbital plane toward the viewer while keeping parallel lines parallel
+    function projectToScreen(worldX, worldY, depth = 0) {
+        if (!perspectiveConfig.enabled) {
+            return { x: worldX, y: worldY, scale: 1 };
+        }
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const tilt = perspectiveConfig.tiltAngle;
+
+        // Convert to coordinates relative to center
+        const relX = worldX - centerX;
+        const relY = worldY - centerY;
+
+        // True isometric projection:
+        // 1. Rotate 45 degrees around vertical axis
+        // 2. Tilt forward (compress Y)
+        const angle = Math.PI / 4;  // 45 degrees
+        const cos45 = Math.cos(angle);
+        const sin45 = Math.sin(angle);
+        
+        // Rotate in XY plane by 45 degrees
+        const rotX = relX * cos45 - relY * sin45;
+        const rotY = relX * sin45 + relY * cos45;
+        
+        // Apply tilt compression to Y axis and depth offset (+ depth pushes downward)
+        const screenX = centerX + rotX;
+        const screenY = centerY + rotY * (1 - tilt) + depth * tilt * 0.5;
+
+        // In isometric, scale is constant (no size change with distance)
+        return { x: screenX, y: screenY, scale: 1 };
+    }
+
     // Draw central star
     function drawCentralStar() {
-        const x = canvas.width / 2;
-        const y = canvas.height / 2;
+        const worldX = canvas.width / 2;
+        const worldY = canvas.height / 2;
         const pulse = Math.sin(centralStar.pulsePhase) * 0.05 + 1;
-        const radius = centralStar.baseRadius * pulse;
-        
+
+        // Project to screen space
+        const proj = projectToScreen(worldX, worldY);
+        const x = proj.x;
+        const y = proj.y;
+        const radius = centralStar.baseRadius * pulse * proj.scale;
+
         // Outer glow
         const outerGlow = ctx.createRadialGradient(x, y, 0, x, y, radius * 3);
         outerGlow.addColorStop(0, 'rgba(255, 200, 100, 0.15)');
         outerGlow.addColorStop(0.3, 'rgba(255, 150, 50, 0.08)');
         outerGlow.addColorStop(0.6, 'rgba(255, 100, 0, 0.03)');
         outerGlow.addColorStop(1, 'rgba(255, 80, 0, 0)');
-        
+
         ctx.beginPath();
         ctx.arc(x, y, radius * 3, 0, Math.PI * 2);
         ctx.fillStyle = outerGlow;
         ctx.fill();
-        
+
         // Core glow
         const coreGlow = ctx.createRadialGradient(x, y, 0, x, y, radius);
         coreGlow.addColorStop(0, 'rgba(255, 250, 230, 0.9)');
         coreGlow.addColorStop(0.3, 'rgba(255, 220, 150, 0.7)');
         coreGlow.addColorStop(0.6, 'rgba(255, 180, 80, 0.4)');
         coreGlow.addColorStop(1, 'rgba(255, 140, 40, 0)');
-        
+
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, Math.PI * 2);
         ctx.fillStyle = coreGlow;
         ctx.fill();
     }
-    
-    // Draw orbital trail for a sphere
-    function drawTrail(sphere) {
+
+    // Draw orbital trail as a carved groove in the surface (with perspective projection)
+    function drawTrailAsGroove(sphere) {
         if (sphere.trail.length < 2) return;
-        
+
+        const baseGrooveWidth = perspectiveConfig.trailGrooveWidth;
+        const shadowOffset = 2;
+
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        
+
+        // Project all trail points to screen space
+        const projectedTrail = sphere.trail.map(pt => projectToScreen(pt.x, pt.y));
+
+        // Pass 1: Draw shadow edge (darker, offset down-right)
+        ctx.beginPath();
+        for (let i = 1; i < projectedTrail.length; i++) {
+            const prev = projectedTrail[i - 1];
+            const curr = projectedTrail[i];
+
+            if (i === 1) {
+                ctx.moveTo(prev.x + shadowOffset, prev.y + shadowOffset);
+            }
+            ctx.lineTo(curr.x + shadowOffset, curr.y + shadowOffset);
+        }
+        ctx.strokeStyle = 'rgba(5, 10, 25, 0.5)';
+        ctx.lineWidth = baseGrooveWidth + 2;
+        ctx.stroke();
+
+        // Pass 2: Draw highlight edge (lighter, offset up-left)
+        ctx.beginPath();
+        for (let i = 1; i < projectedTrail.length; i++) {
+            const prev = projectedTrail[i - 1];
+            const curr = projectedTrail[i];
+
+            if (i === 1) {
+                ctx.moveTo(prev.x - shadowOffset * 0.5, prev.y - shadowOffset * 0.5);
+            }
+            ctx.lineTo(curr.x - shadowOffset * 0.5, curr.y - shadowOffset * 0.5);
+        }
+        ctx.strokeStyle = `rgba(${hexToRgb(sphere.colors.highlight)}, 0.15)`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Pass 3: Draw main groove (recessed center with gradient fade)
+        for (let i = 1; i < projectedTrail.length; i++) {
+            const prev = projectedTrail[i - 1];
+            const curr = projectedTrail[i];
+            const progress = i / projectedTrail.length;  // 0 at tail, 1 at head
+
+            // Calculate segment angle for perpendicular gradient
+            const dx = curr.x - prev.x;
+            const dy = curr.y - prev.y;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len < 0.1) continue;
+
+            // Scale groove width by perspective
+            const grooveWidth = baseGrooveWidth * curr.scale;
+
+            // Perpendicular direction for gradient
+            const perpX = -dy / len;
+            const perpY = dx / len;
+            const halfWidth = (grooveWidth * progress) / 2;
+
+            // Create gradient perpendicular to trail segment
+            const gradient = ctx.createLinearGradient(
+                curr.x - perpX * halfWidth, curr.y - perpY * halfWidth,
+                curr.x + perpX * halfWidth, curr.y + perpY * halfWidth
+            );
+
+            const baseAlpha = progress * 0.5;
+            const darkColor = `rgba(${hexToRgb(sphere.colors.shadow)}, ${baseAlpha})`;
+            const midColor = `rgba(${hexToRgb(sphere.colors.dark)}, ${baseAlpha * 0.8})`;
+            const edgeColor = `rgba(${hexToRgb(sphere.colors.mid)}, ${baseAlpha * 0.3})`;
+
+            gradient.addColorStop(0, edgeColor);
+            gradient.addColorStop(0.3, darkColor);
+            gradient.addColorStop(0.5, midColor);
+            gradient.addColorStop(0.7, darkColor);
+            gradient.addColorStop(1, edgeColor);
+
+            ctx.beginPath();
+            ctx.moveTo(prev.x, prev.y);
+            ctx.lineTo(curr.x, curr.y);
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = grooveWidth * progress;
+            ctx.stroke();
+        }
+    }
+
+    // Legacy trail drawing (fallback)
+    function drawTrail(sphere) {
+        if (perspectiveConfig.enabled) {
+            drawTrailAsGroove(sphere);
+            return;
+        }
+
+        if (sphere.trail.length < 2) return;
+
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
         for (let i = 1; i < sphere.trail.length; i++) {
             const prev = sphere.trail[i - 1];
             const curr = sphere.trail[i];
-            const progress = i / sphere.trail.length;  // 0 at tail, 1 at head
-            const alpha = progress * 0.35;  // Fade from 0 to 35% max
-            const lineWidth = 1 + progress * 3;  // Taper from 1px to 4px
-            
+            const progress = i / sphere.trail.length;
+            const alpha = progress * 0.35;
+            const lineWidth = 1 + progress * 3;
+
             ctx.beginPath();
             ctx.moveTo(prev.x, prev.y);
             ctx.lineTo(curr.x, curr.y);
@@ -628,8 +918,8 @@ function initPuzzleNavigation() {
             ctx.stroke();
         }
     }
-    
-    // Draw projected orbit path (dotted ellipse)
+
+    // Draw projected orbit path (dotted ellipse, projected to perspective)
     function drawOrbitPath(sphere) {
         const centerX = sphere.orbitCenterX;
         const centerY = sphere.orbitCenterY;
@@ -637,32 +927,35 @@ function initPuzzleNavigation() {
         const e = sphere.eccentricity;
         const b = a * Math.sqrt(1 - e * e);  // Semi-minor axis
         const tilt = sphere.orbitTilt;
-        
+
         ctx.strokeStyle = `rgba(${hexToRgb(sphere.colors.dark)}, 0.25)`;
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 8]);  // Dotted line pattern
-        
+
         ctx.beginPath();
-        
+
         // Draw ellipse by plotting points
         const steps = 60;
         for (let i = 0; i <= steps; i++) {
             const angle = (i / steps) * Math.PI * 2;
             const cosT = Math.cos(tilt);
             const sinT = Math.sin(tilt);
-            const x = a * Math.cos(angle);
-            const y = b * Math.sin(angle);
-            
-            const rotatedX = centerX + x * cosT - y * sinT;
-            const rotatedY = centerY + x * sinT + y * cosT;
-            
+            const ox = a * Math.cos(angle);
+            const oy = b * Math.sin(angle);
+
+            const worldX = centerX + ox * cosT - oy * sinT;
+            const worldY = centerY + ox * sinT + oy * cosT;
+
+            // Project to screen space
+            const proj = projectToScreen(worldX, worldY);
+
             if (i === 0) {
-                ctx.moveTo(rotatedX, rotatedY);
+                ctx.moveTo(proj.x, proj.y);
             } else {
-                ctx.lineTo(rotatedX, rotatedY);
+                ctx.lineTo(proj.x, proj.y);
             }
         }
-        
+
         ctx.closePath();
         ctx.stroke();
         ctx.setLineDash([]);  // Reset to solid line
@@ -676,16 +969,186 @@ function initPuzzleNavigation() {
             '255, 255, 255';
     }
 
+    // Enhanced 3D sphere rendering with realistic lighting (projected into perspective)
+    function drawSphere3D(sphere) {
+        const { radius, colors } = sphere;
+        const isHovered = sphere === hoveredSphere;
+        const isDragged = sphere === draggedSphere;
+
+        // Project sphere position to screen space
+        const proj = projectToScreen(sphere.x, sphere.y);
+        const x = proj.x;
+        const y = proj.y;
+
+        // Scale radius by perspective (spheres appear smaller when further away)
+        const hoverMultiplier = isHovered ? 1.15 : 1.0;
+        const r = radius * proj.scale * hoverMultiplier;
+
+        // Store projected position for hit detection
+        sphere.screenX = x;
+        sphere.screenY = y;
+        sphere.screenRadius = r;
+
+        // === 1. DROP SHADOW (elliptical, beneath sphere) ===
+        const shadowGradient = ctx.createRadialGradient(
+            x + r * 0.2, y + r * 0.5, 0,
+            x + r * 0.2, y + r * 0.5, r * 1.8
+        );
+        shadowGradient.addColorStop(0, 'rgba(0, 0, 15, 0.4)');
+        shadowGradient.addColorStop(0.4, 'rgba(0, 0, 15, 0.2)');
+        shadowGradient.addColorStop(1, 'rgba(0, 0, 15, 0)');
+
+        ctx.beginPath();
+        ctx.ellipse(x + r * 0.15, y + r * 0.4, r * 1.4, r * 0.7, 0, 0, Math.PI * 2);
+        ctx.fillStyle = shadowGradient;
+        ctx.fill();
+
+        // === 2. OUTER GLOW (atmospheric haze) ===
+        const glowGradient = ctx.createRadialGradient(x, y, r * 0.6, x, y, r * 2.2);
+        glowGradient.addColorStop(0, `rgba(${hexToRgb(colors.mid)}, 0.25)`);
+        glowGradient.addColorStop(0.5, `rgba(${hexToRgb(colors.dark)}, 0.08)`);
+        glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        ctx.beginPath();
+        ctx.arc(x, y, r * 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = glowGradient;
+        ctx.fill();
+
+        // === 3. MAIN SPHERE BODY (multi-stop gradient for depth) ===
+        const bodyGradient = ctx.createRadialGradient(
+            x - r * 0.35, y - r * 0.35, 0,
+            x + r * 0.1, y + r * 0.1, r
+        );
+        bodyGradient.addColorStop(0, colors.highlight);
+        bodyGradient.addColorStop(0.15, colors.mid);
+        bodyGradient.addColorStop(0.4, colors.dark);
+        bodyGradient.addColorStop(0.75, colors.shadow);
+        bodyGradient.addColorStop(1, darkenColor(colors.shadow, 0.6));
+
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = bodyGradient;
+        ctx.fill();
+
+        // === 4. SPECULAR HIGHLIGHT (sharp white reflection) ===
+        const specX = x - r * 0.35;
+        const specY = y - r * 0.4;
+        const specRadius = r * 0.22;
+
+        const specGradient = ctx.createRadialGradient(
+            specX, specY, 0,
+            specX, specY, specRadius
+        );
+        specGradient.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+        specGradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.4)');
+        specGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+        ctx.beginPath();
+        ctx.arc(specX, specY, specRadius, 0, Math.PI * 2);
+        ctx.fillStyle = specGradient;
+        ctx.fill();
+
+        // Secondary smaller specular
+        const spec2X = x - r * 0.15;
+        const spec2Y = y - r * 0.25;
+        const spec2Gradient = ctx.createRadialGradient(
+            spec2X, spec2Y, 0,
+            spec2X, spec2Y, r * 0.12
+        );
+        spec2Gradient.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+        spec2Gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+        ctx.beginPath();
+        ctx.arc(spec2X, spec2Y, r * 0.12, 0, Math.PI * 2);
+        ctx.fillStyle = spec2Gradient;
+        ctx.fill();
+
+        // === 5. RIM LIGHTING (backlit edge on shadow side) ===
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.clip();
+
+        const rimGradient = ctx.createLinearGradient(
+            x - r, y - r,
+            x + r * 1.2, y + r * 1.2
+        );
+        rimGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        rimGradient.addColorStop(0.65, 'rgba(0, 0, 0, 0)');
+        rimGradient.addColorStop(0.8, `rgba(${hexToRgb(colors.highlight)}, 0.25)`);
+        rimGradient.addColorStop(0.95, `rgba(${hexToRgb(colors.highlight)}, 0.5)`);
+        rimGradient.addColorStop(1, `rgba(255, 255, 255, 0.3)`);
+
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.strokeStyle = rimGradient;
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        ctx.restore();
+
+        // === 6. TERMINATOR BAND (subtle darkening at light/shadow boundary) ===
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.clip();
+
+        const terminatorGradient = ctx.createLinearGradient(
+            x - r * 0.3, y - r * 0.3,
+            x + r * 0.5, y + r * 0.5
+        );
+        terminatorGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        terminatorGradient.addColorStop(0.35, 'rgba(0, 0, 0, 0)');
+        terminatorGradient.addColorStop(0.45, 'rgba(0, 0, 20, 0.12)');
+        terminatorGradient.addColorStop(0.55, 'rgba(0, 0, 20, 0.12)');
+        terminatorGradient.addColorStop(0.65, 'rgba(0, 0, 0, 0)');
+        terminatorGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        ctx.fillStyle = terminatorGradient;
+        ctx.fill();
+        ctx.restore();
+
+        // === 7. OUTER RIM (subtle edge definition) ===
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${isHovered ? 0.35 : 0.15})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // === 8. HOVER RING ===
+        if (isHovered && !isDragged) {
+            ctx.beginPath();
+            ctx.arc(x, y, r + 8, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // Draw label at projected position
+        if (isHovered || isMobile) {
+            drawSphereLabelProjected(sphere, x, y, r);
+        }
+    }
+
+    // Helper: darken a hex color
+    function darkenColor(hex, factor) {
+        const rgb = hexToRgb(hex).split(', ').map(Number);
+        return `rgb(${Math.floor(rgb[0] * factor)}, ${Math.floor(rgb[1] * factor)}, ${Math.floor(rgb[2] * factor)})`;
+    }
+
+    // Legacy sphere drawing (fallback)
     function drawSphere(sphere) {
+        if (perspectiveConfig.enabled) {
+            drawSphere3D(sphere);
+            return;
+        }
+
         const { x, y, radius, colors } = sphere;
         const isHovered = sphere === hoveredSphere;
         const isDragged = sphere === draggedSphere;
 
-        // Scale up slightly when hovered
         const scaleMultiplier = isHovered ? 1.15 : 1.0;
         const drawRadius = radius * scaleMultiplier;
 
-        // Highlight ring for hovered
         if (isHovered && !isDragged) {
             ctx.beginPath();
             ctx.arc(x, y, drawRadius + 6, 0, Math.PI * 2);
@@ -694,18 +1157,16 @@ function initPuzzleNavigation() {
             ctx.stroke();
         }
 
-        // Outer glow
         const glowGradient = ctx.createRadialGradient(x, y, drawRadius * 0.5, x, y, drawRadius * 2);
         glowGradient.addColorStop(0, `rgba(${hexToRgb(colors.mid)}, 0.3)`);
         glowGradient.addColorStop(0.5, `rgba(${hexToRgb(colors.dark)}, 0.1)`);
         glowGradient.addColorStop(1, `rgba(${hexToRgb(colors.shadow)}, 0)`);
-        
+
         ctx.beginPath();
         ctx.arc(x, y, drawRadius * 2, 0, Math.PI * 2);
         ctx.fillStyle = glowGradient;
         ctx.fill();
 
-        // Main sphere gradient
         const gradient = ctx.createRadialGradient(
             x - drawRadius * 0.3, y - drawRadius * 0.3, 0,
             x, y, drawRadius
@@ -715,25 +1176,49 @@ function initPuzzleNavigation() {
         gradient.addColorStop(0.7, colors.dark);
         gradient.addColorStop(1, colors.shadow);
 
-        // Draw sphere
         ctx.beginPath();
         ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
         ctx.fillStyle = gradient;
         ctx.fill();
 
-        // Rim highlight
         ctx.beginPath();
         ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(255, 255, 255, ${isHovered ? 0.4 : 0.2})`;
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Draw label on hover
         if (isHovered || isMobile) {
             drawSphereLabel(sphere, scaleMultiplier);
         }
     }
 
+    // Draw label at projected screen position
+    function drawSphereLabelProjected(sphere, screenX, screenY, screenRadius) {
+        const { label } = sphere;
+
+        ctx.font = '600 11px "Fira Code", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const labelY = screenY + screenRadius + 18;
+        const padding = 6;
+        const textWidth = ctx.measureText(label.toUpperCase()).width;
+
+        // Label background - dark for space theme
+        ctx.fillStyle = 'rgba(10, 10, 30, 0.85)';
+        ctx.fillRect(screenX - textWidth/2 - padding, labelY - 8, textWidth + padding * 2, 16);
+
+        // Label border
+        ctx.strokeStyle = 'rgba(100, 150, 200, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(screenX - textWidth/2 - padding, labelY - 8, textWidth + padding * 2, 16);
+
+        // Label text
+        ctx.fillStyle = '#a0c0e0';
+        ctx.fillText(label.toUpperCase(), screenX, labelY);
+    }
+
+    // Legacy label drawing (for fallback mode)
     function drawSphereLabel(sphere, scaleMultiplier = 1) {
         const { x, y, label, radius } = sphere;
         const drawRadius = radius * scaleMultiplier;
@@ -849,7 +1334,7 @@ function initPuzzleNavigation() {
             }
             
             // Limit trail length
-            const maxTrailLength = 60;
+            const maxTrailLength = 75;
             if (sphere.trail.length > maxTrailLength) {
                 sphere.trail.shift();
             }
@@ -898,9 +1383,21 @@ function initPuzzleNavigation() {
             drawTrail(sphere);
         }
 
-        // Draw spheres
-        for (const sphere of spheres) {
-            drawSphere(sphere);
+        // Sort spheres by Y position for proper depth ordering (back to front)
+        // In isometric view, objects with lower screen Y are further back
+        const sortedSpheres = [...spheres].sort((a, b) => {
+            const projA = projectToScreen(a.x, a.y);
+            const projB = projectToScreen(b.x, b.y);
+            return projA.y - projB.y;
+        });
+
+        // Draw spheres (use 3D version if perspective enabled)
+        for (const sphere of sortedSpheres) {
+            if (perspectiveConfig.enabled) {
+                drawSphere3D(sphere);
+            } else {
+                drawSphere(sphere);
+            }
         }
 
         animationId = requestAnimationFrame(draw);
