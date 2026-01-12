@@ -27,7 +27,7 @@ function initPuzzleNavigation() {
         enabled: true,
         // Isometric settings
         tiltAngle: 0.55,             // How much to tilt the orbital plane (0 = top-down, 1 = edge-on)
-        gridLines: { horizontal: 30, vertical: 30 },  // Denser grid for better gravity visualization
+        gridLines: { horizontal: 38, vertical: 38 },  // Denser grid for better gravity visualization
         wellDepthMultiplier: 1.8,    // Gravity well depth intensity
         trailGrooveWidth: 8,         // Width of trail grooves
     };
@@ -362,16 +362,19 @@ function initPuzzleNavigation() {
         const dy = py - sphere.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         const wellRadius = sphere.radius * 6;  // Gravity influence radius
-        const maxDepth = sphere.radius * perspectiveConfig.wellDepthMultiplier * 2.5;
+        const coreRadius = sphere.radius * 0.8;  // Flat bottom zone to prevent spikes
+        const maxDepth = sphere.radius * perspectiveConfig.wellDepthMultiplier * 3;
 
         if (distance >= wellRadius || distance === 0) {
             return { x: 0, y: 0, depth: 0 };
         }
 
-        const normalizedDist = distance / wellRadius;
+        // Use effective distance that stops at core radius (creates flat bottom)
+        const effectiveDistance = Math.max(distance, coreRadius);
+        const normalizedDist = effectiveDistance / wellRadius;
 
         // Radial displacement (pulling toward center of well)
-        const pullStrength = Math.pow(1 - normalizedDist, 2) * sphere.radius * 0.8;
+        const pullStrength = Math.pow(1 - normalizedDist, 2) * sphere.radius * 0.96;
         const dirX = dx / distance;
         const dirY = dy / distance;
 
@@ -381,8 +384,8 @@ function initPuzzleNavigation() {
         const depth = depthFactor * edgeFactor * maxDepth;
 
         return {
-            x: -dirX * pullStrength * 0.5,
-            y: -dirY * pullStrength * 0.5,
+            x: -dirX * pullStrength * 0.6,
+            y: -dirY * pullStrength * 0.6,
             depth: depth
         };
     }
@@ -418,22 +421,22 @@ function initPuzzleNavigation() {
         const sunDy = py - sunY;
         const sunDistance = Math.sqrt(sunDx * sunDx + sunDy * sunDy);
         const sunWellRadius = centralStar.baseRadius * 6;
-        const sunCoreRadius = centralStar.baseRadius * 0.8;  // Flat bottom zone
-        const sunMaxDepth = centralStar.baseRadius * perspectiveConfig.wellDepthMultiplier * 3;
+        const sunCoreRadius = centralStar.baseRadius * 1.5;  // Larger flat bottom zone
+        const sunMaxDepth = centralStar.baseRadius * perspectiveConfig.wellDepthMultiplier * 2.4;  // 20% increase
         
         if (sunDistance < sunWellRadius && sunDistance > 0) {
             // Use effective distance that stops at core radius (creates flat bottom)
             const effectiveDistance = Math.max(sunDistance, sunCoreRadius);
             const normalizedDist = effectiveDistance / sunWellRadius;
-            const pullStrength = Math.pow(1 - normalizedDist, 2) * centralStar.baseRadius * 0.3;
+            const pullStrength = Math.pow(1 - normalizedDist, 2) * centralStar.baseRadius * 0.36;  // 20% increase
             const dirX = sunDx / sunDistance;
             const dirY = sunDy / sunDistance;
             const depthFactor = Math.pow(1 - normalizedDist, 2);
             const edgeFactor = Math.cos(normalizedDist * Math.PI * 0.5);
             const depth = depthFactor * edgeFactor * sunMaxDepth;
             
-            totalDx += -dirX * pullStrength * 0.3;
-            totalDy += -dirY * pullStrength * 0.3;
+            totalDx += -dirX * pullStrength * 0.36;  // 20% increase
+            totalDy += -dirY * pullStrength * 0.36;
             maxDepth = Math.max(maxDepth, depth);
         }
 
@@ -468,8 +471,52 @@ function initPuzzleNavigation() {
     }
 
     // Drawing functions
+    
+    // Helper to get heatmap color based on depth intensity (0-1)
+    function getGravityHeatColor(intensity, baseAlpha) {
+        // Clamp intensity to 0-1
+        const t = Math.min(1, Math.max(0, intensity));
+        
+        // Color gradient: deep blue -> cyan -> green -> yellow -> orange -> red
+        let r, g, b;
+        if (t < 0.2) {
+            // Blue to cyan
+            const lt = t / 0.2;
+            r = 30;
+            g = Math.floor(60 + lt * 140);
+            b = Math.floor(150 + lt * 50);
+        } else if (t < 0.4) {
+            // Cyan to green
+            const lt = (t - 0.2) / 0.2;
+            r = Math.floor(30 + lt * 50);
+            g = Math.floor(200 - lt * 30);
+            b = Math.floor(200 - lt * 150);
+        } else if (t < 0.6) {
+            // Green to yellow
+            const lt = (t - 0.4) / 0.2;
+            r = Math.floor(80 + lt * 175);
+            g = Math.floor(170 + lt * 55);
+            b = Math.floor(50 - lt * 30);
+        } else if (t < 0.8) {
+            // Yellow to orange
+            const lt = (t - 0.6) / 0.2;
+            r = 255;
+            g = Math.floor(225 - lt * 100);
+            b = Math.floor(20);
+        } else {
+            // Orange to red
+            const lt = (t - 0.8) / 0.2;
+            r = 255;
+            g = Math.floor(125 - lt * 75);
+            b = Math.floor(20 + lt * 30);
+        }
+        
+        // Boost alpha for high intensity areas
+        const alpha = baseAlpha + t * 0.5;
+        return `rgba(${r}, ${g}, ${b}, ${Math.min(1, alpha)})`;
+    }
 
-    // Draw isometric grid with gravity well depressions
+    // Draw isometric grid with gravity well depressions and heatmap coloring
     function drawPerspectiveGrid() {
         const { horizontal: numHLines, vertical: numVLines } = perspectiveConfig.gridLines;
 
@@ -479,6 +526,9 @@ function initPuzzleNavigation() {
         // Grid extends beyond visible area
         const gridRadius = Math.max(canvas.width, canvas.height) * 1.2;
         const gridSpacing = gridRadius / numHLines;
+        
+        // Max depth for normalization (based on sun's max depth)
+        const maxDepthReference = centralStar.baseRadius * perspectiveConfig.wellDepthMultiplier * 3;
 
         // Draw horizontal lines (these become angled lines in isometric view)
         // In world space they're horizontal (constant Y), but we project them
@@ -487,13 +537,10 @@ function initPuzzleNavigation() {
 
             // Alpha fades toward edges
             const distFromCenter = Math.abs(i) / numHLines;
-            const alpha = 0.08 + (1 - distFromCenter) * 0.12;
-
-            ctx.strokeStyle = `rgba(50, 80, 130, ${alpha})`;
-            ctx.lineWidth = 0.8;
+            const baseAlpha = 0.08 + (1 - distFromCenter) * 0.12;
 
             const segments = 60;
-            let inPath = false;
+            let prevProj = null;
             
             for (let j = 0; j <= segments; j++) {
                 const segT = j / segments;
@@ -504,18 +551,21 @@ function initPuzzleNavigation() {
 
                 // Project to screen using isometric projection
                 const proj = projectToScreen(worldX + d.x, worldY + d.y, d.depth);
+                
+                // Calculate intensity based on depth
+                const intensity = d.depth / maxDepthReference;
 
-                if (!inPath) {
+                if (prevProj) {
+                    // Draw segment with heatmap color
                     ctx.beginPath();
-                    ctx.moveTo(proj.x, proj.y);
-                    inPath = true;
-                } else {
+                    ctx.moveTo(prevProj.x, prevProj.y);
                     ctx.lineTo(proj.x, proj.y);
+                    ctx.strokeStyle = getGravityHeatColor(intensity, baseAlpha);
+                    ctx.lineWidth = 0.8 + intensity * 1.5;  // Thicker lines in high gravity
+                    ctx.stroke();
                 }
-            }
-            
-            if (inPath) {
-                ctx.stroke();
+                
+                prevProj = proj;
             }
         }
 
@@ -525,13 +575,10 @@ function initPuzzleNavigation() {
 
             // Alpha fades toward edges
             const distFromCenter = Math.abs(i) / numVLines;
-            const alpha = 0.08 + (1 - distFromCenter) * 0.12;
-
-            ctx.strokeStyle = `rgba(50, 80, 130, ${alpha})`;
-            ctx.lineWidth = 0.8;
+            const baseAlpha = 0.08 + (1 - distFromCenter) * 0.12;
 
             const segments = 60;
-            let inPath = false;
+            let prevProj = null;
             
             for (let j = 0; j <= segments; j++) {
                 const segT = j / segments;
@@ -542,18 +589,21 @@ function initPuzzleNavigation() {
 
                 // Project to screen using isometric projection
                 const proj = projectToScreen(worldX + d.x, worldY + d.y, d.depth);
+                
+                // Calculate intensity based on depth
+                const intensity = d.depth / maxDepthReference;
 
-                if (!inPath) {
+                if (prevProj) {
+                    // Draw segment with heatmap color
                     ctx.beginPath();
-                    ctx.moveTo(proj.x, proj.y);
-                    inPath = true;
-                } else {
+                    ctx.moveTo(prevProj.x, prevProj.y);
                     ctx.lineTo(proj.x, proj.y);
+                    ctx.strokeStyle = getGravityHeatColor(intensity, baseAlpha);
+                    ctx.lineWidth = 0.8 + intensity * 1.5;  // Thicker lines in high gravity
+                    ctx.stroke();
                 }
-            }
-            
-            if (inPath) {
-                ctx.stroke();
+                
+                prevProj = proj;
             }
         }
 
