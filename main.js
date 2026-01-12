@@ -117,7 +117,15 @@ function initPuzzleNavigation() {
     // State
     let time = 0;
     let hoveredSphere = null;
-    let isMobile = 'ontouchstart' in window;
+    let isMobile = 'ontouchstart' in window || window.innerWidth < 768;
+    
+    // Mobile scaling - reduce planet sizes on smaller screens
+    const mobileScale = isMobile ? 0.6 : 1.0;
+    for (const sphere of spheres) {
+        sphere.radius *= mobileScale;
+    }
+    // Also scale the central star
+    centralStar.baseRadius *= mobileScale;
 
     // DOM elements
     const contentPanel = document.getElementById('content-panel');
