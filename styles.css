@@ -1547,6 +1547,21 @@ img {
     letter-spacing: 0.15em;
 }
 
+/* Site footer - subtle attribution */
+.site-footer {
+    position: fixed;
+    bottom: 12px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: rgba(100, 128, 160, 0.5);
+    letter-spacing: 0.05em;
+    pointer-events: none;
+    z-index: 10;
+}
+
 /* ===================================
    Responsive Design
    =================================== */
