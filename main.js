@@ -1421,8 +1421,7 @@ function initPuzzleNavigation() {
 /* ===================================
    Contact Form
    =================================== */
-// IMPORTANT: Replace this with your Cloudflare Worker URL after deployment
-const CONTACT_WORKER_URL = 'YOUR_WORKER_URL_HERE'; // e.g., 'https://contact-form.yourname.workers.dev'
+const CONTACT_WORKER_URL = 'https://contact-form.christopher-lin-508.workers.dev/';
 
 function initContactForm() {
     const form = document.getElementById('contact-form');
