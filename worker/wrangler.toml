@@ -6,8 +6,10 @@ compatibility_date = "2024-01-01"
 [vars]
 TO_EMAIL = "hello@chrisjlin.com"
 
+# KV Namespace for rate limiting
+[[kv_namespaces]]
+binding = "CONTACT_RATE_LIMIT"
+id = "a9f5ba9fef7048dd9ea4b3cef421feb1"
+
 # Secrets (set via Cloudflare dashboard → Settings → Variables and Secrets)
 # - RESEND_API_KEY: Your Resend API key (must be set in dashboard, not here)
-
-# KV Namespace binding (set in Cloudflare dashboard → Settings → Bindings)
-# - CONTACT_RATE_LIMIT: KV namespace for rate limiting
