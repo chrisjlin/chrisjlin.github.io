@@ -57,7 +57,7 @@ export default {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'Portfolio Contact <onboarding@resend.dev>', // TODO: Change to contact@chrisjlin.com once domain is verified
+          from: 'Portfolio Contact <contact@chrisjlin.com>',
           to: env.TO_EMAIL,
           subject: `Portfolio Contact: ${name}`,
           reply_to: email,
