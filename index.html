@@ -256,6 +256,11 @@
                             <label for="message">message=</label>
                             <textarea id="message" name="message" placeholder='"Your message here..."' rows="4" required></textarea>
                         </div>
+                        <!-- Honeypot field - hidden from humans, bots fill it -->
+                        <div class="form-line hp-field" aria-hidden="true">
+                            <label for="website">website=</label>
+                            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+                        </div>
                         <div class="form-line">
                             <span class="prompt">&gt;</span>
                             <button type="submit" class="submit-btn">

@@ -1437,11 +1437,12 @@ function initContactForm() {
         const submitBtn = newForm.querySelector('.submit-btn');
         const originalText = submitBtn.innerHTML;
 
-        // Get form data
+        // Get form data (includes honeypot field)
         const formData = {
             name: newForm.querySelector('#name').value.trim(),
             email: newForm.querySelector('#email').value.trim(),
-            message: newForm.querySelector('#message').value.trim()
+            message: newForm.querySelector('#message').value.trim(),
+            website: newForm.querySelector('#website').value // honeypot
         };
 
         submitBtn.innerHTML = 'sending... <span class="cursor">_</span>';

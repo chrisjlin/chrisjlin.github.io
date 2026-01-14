@@ -10,9 +10,16 @@
  * 4. Add another variable:
  *    - Name: TO_EMAIL
  *    - Value: your email address where you want to receive messages
- * 5. Deploy the worker and copy its URL (e.g., https://contact-form.yourname.workers.dev)
- * 6. Update YOUR_WORKER_URL in main.js with this URL
+ * 5. Add KV Namespace binding:
+ *    - Variable name: CONTACT_RATE_LIMIT
+ *    - Select your KV namespace
+ * 6. Deploy the worker and copy its URL (e.g., https://contact-form.yourname.workers.dev)
+ * 7. Update YOUR_WORKER_URL in main.js with this URL
  */
+
+// Rate limiting config
+const RATE_LIMIT_MAX = 5;           // Max requests per window
+const RATE_LIMIT_WINDOW = 60 * 60;  // Window in seconds (1 hour)
 
 export default {
   async fetch(request, env) {
@@ -36,7 +43,42 @@ export default {
     }
 
     try {
-      const { name, email, message } = await request.json();
+      // Rate limiting check
+      const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
+      const rateLimitKey = `rate:${clientIP}`;
+      
+      if (env.CONTACT_RATE_LIMIT) {
+        const currentCount = await env.CONTACT_RATE_LIMIT.get(rateLimitKey);
+        const count = currentCount ? parseInt(currentCount, 10) : 0;
+        
+        if (count >= RATE_LIMIT_MAX) {
+          return new Response(JSON.stringify({ error: 'Too many requests. Please try again later.' }), {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+          });
+        }
+        
+        // Increment counter (expires after window)
+        await env.CONTACT_RATE_LIMIT.put(rateLimitKey, String(count + 1), {
+          expirationTtl: RATE_LIMIT_WINDOW,
+        });
+      }
+
+      const { name, email, message, website } = await request.json();
+
+      // Honeypot check - if filled, it's a bot
+      if (website) {
+        // Pretend success to not alert the bot
+        return new Response(JSON.stringify({ success: true }), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      }
 
       // Basic validation
       if (!name || !email || !message) {

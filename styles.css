@@ -1390,6 +1390,15 @@ img {
     padding: 24px;
 }
 
+/* Honeypot field - hidden from humans */
+.hp-field {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+    opacity: 0;
+    pointer-events: none;
+}
+
 .form-line {
     display: flex;
     align-items: center;
