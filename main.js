@@ -1421,6 +1421,9 @@ function initPuzzleNavigation() {
 /* ===================================
    Contact Form
    =================================== */
+// IMPORTANT: Replace this with your Cloudflare Worker URL after deployment
+const CONTACT_WORKER_URL = 'YOUR_WORKER_URL_HERE'; // e.g., 'https://contact-form.yourname.workers.dev'
+
 function initContactForm() {
     const form = document.getElementById('contact-form');
     if (!form) return;
@@ -1435,17 +1438,46 @@ function initContactForm() {
         const submitBtn = newForm.querySelector('.submit-btn');
         const originalText = submitBtn.innerHTML;
 
+        // Get form data
+        const formData = {
+            name: newForm.querySelector('#name').value.trim(),
+            email: newForm.querySelector('#email').value.trim(),
+            message: newForm.querySelector('#message').value.trim()
+        };
+
         submitBtn.innerHTML = 'sending... <span class="cursor">_</span>';
         submitBtn.disabled = true;
 
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        try {
+            const response = await fetch(CONTACT_WORKER_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            });
 
-        submitBtn.innerHTML = 'message_sent() ✓';
-        submitBtn.style.borderColor = 'var(--accent-tertiary)';
-        submitBtn.style.color = 'var(--accent-tertiary)';
+            const result = await response.json();
 
+            if (response.ok && result.success) {
+                // Success
+                submitBtn.innerHTML = 'message_sent() ✓';
+                submitBtn.style.borderColor = 'var(--accent-tertiary)';
+                submitBtn.style.color = 'var(--accent-tertiary)';
+                newForm.reset();
+            } else {
+                // Server error
+                throw new Error(result.error || 'Failed to send');
+            }
+        } catch (error) {
+            console.error('Contact form error:', error);
+            submitBtn.innerHTML = 'error() ✗';
+            submitBtn.style.borderColor = 'var(--accent-red)';
+            submitBtn.style.color = 'var(--accent-red)';
+        }
+
+        // Reset button after delay
         setTimeout(() => {
-            newForm.reset();
             submitBtn.innerHTML = originalText;
             submitBtn.disabled = false;
             submitBtn.style.borderColor = '';

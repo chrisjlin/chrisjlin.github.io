@@ -1,0 +1,8 @@
+name = "contact-form"
+main = "contact-worker.js"
+compatibility_date = "2024-01-01"
+
+# Environment variables are set in Cloudflare dashboard
+# (Settings → Variables and Secrets)
+# - RESEND_API_KEY: Your Resend API key
+# - TO_EMAIL: Your email address
