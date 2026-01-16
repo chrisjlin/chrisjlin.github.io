@@ -27,7 +27,7 @@ function initPuzzleNavigation() {
         enabled: true,
         // Isometric settings
         tiltAngle: 0.55,             // How much to tilt the orbital plane (0 = top-down, 1 = edge-on)
-        gridLines: { horizontal: 38, vertical: 38 },  // Denser grid for better gravity visualization
+        gridLines: { horizontal: 57, vertical: 57 },  // Denser grid for better gravity visualization
         wellDepthMultiplier: 1.8,    // Gravity well depth intensity
         trailGrooveWidth: 8,         // Width of trail grooves
     };
@@ -48,13 +48,13 @@ function initPuzzleNavigation() {
     // Deep Space Jewels (alt):  Sapphire, Amethyst, Emerald, Amber
     // Warm Metallics (current): Silver, Bronze, Patina, Gold
     const spheres = [
-        { 
+        {
             sectionId: 'about', label: 'About',
-            radius: 38, 
-            semiMajorAxis: 0.20,  // As fraction of min(width,height)
+            radius: 32,
+            semiMajorAxis: 0.17,  // As fraction of min(width,height) - reduced 15%
             eccentricity: 0.15,
             orbitTilt: 0.1,  // Radians
-            angle: 0,
+            angle: Math.random() * Math.PI * 2,  // Random starting position
             baseAngularVelocity: 0.003,
             rotation: 0,  // Surface rotation angle for rolling effect
             // Deep Space Jewels - Sapphire
@@ -65,13 +65,13 @@ function initPuzzleNavigation() {
             vx: 0, vy: 0,
             orbitCenterX: 0, orbitCenterY: 0
         },
-        { 
+        {
             sectionId: 'projects', label: 'Projects',
-            radius: 34, 
-            semiMajorAxis: 0.30,
+            radius: 28,
+            semiMajorAxis: 0.255,  // reduced 15%
             eccentricity: 0.2,
             orbitTilt: -0.15,
-            angle: Math.PI * 0.5,
+            angle: Math.random() * Math.PI * 2,  // Random starting position
             baseAngularVelocity: 0.0022,
             rotation: 0,  // Surface rotation angle for rolling effect
             // Deep Space Jewels - Amethyst
@@ -82,13 +82,13 @@ function initPuzzleNavigation() {
             vx: 0, vy: 0,
             orbitCenterX: 0, orbitCenterY: 0
         },
-        { 
+        {
             sectionId: 'blog', label: 'Blog',
-            radius: 30, 
-            semiMajorAxis: 0.40,
+            radius: 25,
+            semiMajorAxis: 0.34,  // reduced 15%
             eccentricity: 0.12,
             orbitTilt: 0.2,
-            angle: Math.PI,
+            angle: Math.random() * Math.PI * 2,  // Random starting position
             baseAngularVelocity: 0.0016,
             rotation: 0,  // Surface rotation angle for rolling effect
             // Deep Space Jewels - Emerald
@@ -99,13 +99,13 @@ function initPuzzleNavigation() {
             vx: 0, vy: 0,
             orbitCenterX: 0, orbitCenterY: 0
         },
-        { 
+        {
             sectionId: 'contact', label: 'Contact',
-            radius: 28, 
-            semiMajorAxis: 0.50,
+            radius: 22,
+            semiMajorAxis: 0.425,  // reduced 15%
             eccentricity: 0.18,
             orbitTilt: -0.05,
-            angle: Math.PI * 1.5,
+            angle: Math.random() * Math.PI * 2,  // Random starting position
             baseAngularVelocity: 0.0012,
             rotation: 0,  // Surface rotation angle for rolling effect
             // Deep Space Jewels - Amber
@@ -137,6 +137,28 @@ function initPuzzleNavigation() {
     const panelClose = document.getElementById('panel-close');
     const panelBackdrop = document.getElementById('panel-backdrop');
     const hintText = document.getElementById('hint-text');
+    const viewToggle = document.getElementById('view-toggle');
+
+    // View state for smooth transitions
+    const TILT_3D = 0.55;  // Isometric tilt
+    const TILT_FLAT = 0;   // Top-down view (parallel to grid)
+
+    // Load saved view preference from localStorage
+    const savedViewFlat = localStorage.getItem('viewFlat') === 'true';
+    const viewState = {
+        targetTilt: savedViewFlat ? TILT_FLAT : TILT_3D,
+        isFlat: savedViewFlat
+    };
+
+    // Apply saved state immediately (no animation on load)
+    if (savedViewFlat) {
+        perspectiveConfig.tiltAngle = TILT_FLAT;
+        if (viewToggle) {
+            viewToggle.classList.add('flat');
+            const label = viewToggle.querySelector('.view-label');
+            if (label) label.textContent = 'Iso';
+        }
+    }
 
     // Generate star field
     function generateStarField() {
@@ -356,6 +378,24 @@ function initPuzzleNavigation() {
     // Touch support
     canvas.addEventListener('touchstart', handleTouchTap, { passive: false });
 
+    // View toggle handler
+    if (viewToggle) {
+        viewToggle.addEventListener('click', () => {
+            viewState.isFlat = !viewState.isFlat;
+            viewState.targetTilt = viewState.isFlat ? TILT_FLAT : TILT_3D;
+
+            // Save preference to localStorage
+            localStorage.setItem('viewFlat', viewState.isFlat);
+
+            // Update button appearance
+            viewToggle.classList.toggle('flat', viewState.isFlat);
+            const label = viewToggle.querySelector('.view-label');
+            if (label) {
+                label.textContent = viewState.isFlat ? 'Iso' : '2D';
+            }
+        });
+    }
+
     // Grid displacement calculations with gravity well depth
     function getGravityWellDisplacement(px, py, sphere) {
         const dx = px - sphere.x;
@@ -518,14 +558,20 @@ function initPuzzleNavigation() {
 
     // Draw isometric grid with gravity well depressions and heatmap coloring
     function drawPerspectiveGrid() {
-        const { horizontal: numHLines, vertical: numVLines } = perspectiveConfig.gridLines;
-
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
 
         // Grid extends beyond visible area
         const gridRadius = Math.max(canvas.width, canvas.height) * 1.2;
-        const gridSpacing = gridRadius / numHLines;
+
+        // Calculate grid spacing based on sphere size (use average sphere radius)
+        // This keeps grid resolution consistent regardless of window size
+        const avgSphereRadius = spheres.reduce((sum, s) => sum + s.radius, 0) / spheres.length;
+        const gridSpacing = avgSphereRadius * 1.5;  // Grid cells ~1.5x sphere radius
+
+        // Calculate number of lines needed to cover the grid area
+        const numHLines = Math.ceil(gridRadius / gridSpacing);
+        const numVLines = numHLines;
         
         // Max depth for normalization (based on sun's max depth)
         const maxDepthReference = centralStar.baseRadius * perspectiveConfig.wellDepthMultiplier * 3;
@@ -758,26 +804,27 @@ function initPuzzleNavigation() {
             let x3d = radius * Math.sin(phi) * Math.cos(theta);
             let y3d = radius * Math.sin(phi) * Math.sin(theta);
             const z3d = radius * Math.cos(phi);  // Z is up (pole direction)
-            
+
             // Apply spin rotation around Z axis (vertical spin)
             const spinX = x3d * cosS - y3d * sinS;
             const spinY = x3d * sinS + y3d * cosS;
-            
+
             // Isometric rotation of XY plane by 45 degrees
             const rotX = spinX * cos45 - spinY * sin45;
             const rotY = spinX * sin45 + spinY * cos45;
-            
-            // For spherical appearance: compress Y less than grid, but keep equator aligned
-            // The equator (z3d=0) gets full isometric compression
-            // As we move toward poles, blend toward less compression
+
+            // For spherical appearance: compress Y based on tilt
+            // At tilt=0 (flat), no compression - sphere appears as circle from above
+            // At tilt=0.55 (iso), apply perspective compression
             const equatorCompression = (1 - tilt);  // Same as grid
-            const poleCompression = 0.85;  // Less compression at poles
+            const poleCompression = 1 - tilt * 0.27;  // Scale pole compression with tilt
             const zFactor = Math.abs(z3d) / radius;  // 0 at equator, 1 at poles
             const compression = equatorCompression + (poleCompression - equatorCompression) * zFactor;
-            
+
+            // Z offset also scales with tilt (0 when flat, full effect when tilted)
             const screenX = centerX + rotX;
-            const screenY = centerY + rotY * compression - z3d * 0.68;
-            
+            const screenY = centerY + rotY * compression - z3d * 0.68 * (tilt / 0.55);
+
             // Return depth for potential hidden line removal
             return { x: screenX, y: screenY, z: rotY };
         }
@@ -1051,24 +1098,27 @@ function initPuzzleNavigation() {
             let x3d = r * Math.sin(phi) * Math.cos(theta);
             let y3d = r * Math.sin(phi) * Math.sin(theta);
             const z3d = r * Math.cos(phi);
-            
+
             // Apply spin rotation around Z axis
             const spinX = x3d * cosS - y3d * sinS;
             const spinY = x3d * sinS + y3d * cosS;
-            
+
             // Isometric rotation of XY plane by 45 degrees
             const rotX = spinX * cos45 - spinY * sin45;
             const rotY = spinX * sin45 + spinY * cos45;
-            
-            // For spherical appearance: compress Y less than grid, but keep equator aligned
+
+            // For spherical appearance: compress Y based on tilt
+            // At tilt=0 (flat), no compression - sphere appears as circle from above
+            // At tilt=0.55 (iso), apply perspective compression
             const equatorCompression = (1 - tilt);  // Same as grid
-            const poleCompression = 0.85;  // Less compression at poles
+            const poleCompression = 1 - tilt * 0.27;  // Scale pole compression with tilt (0.85 at full tilt)
             const zFactor = Math.abs(z3d) / r;  // 0 at equator, 1 at poles
             const compression = equatorCompression + (poleCompression - equatorCompression) * zFactor;
-            
+
+            // Z offset also scales with tilt (0 when flat, full effect when tilted)
             const screenX = centerX + rotX;
-            const screenY = centerY + rotY * compression - z3d * 0.68;
-            
+            const screenY = centerY + rotY * compression - z3d * 0.68 * (tilt / 0.55);
+
             return { x: screenX, y: screenY, z: rotY };
         }
         
@@ -1346,7 +1396,7 @@ function initPuzzleNavigation() {
     function draw() {
         // Clear the entire canvas first
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
+
         // Draw star field background
         if (starField) {
             ctx.drawImage(starField, 0, 0);
@@ -1358,6 +1408,14 @@ function initPuzzleNavigation() {
         // Update time
         time += 16;
         centralStar.pulsePhase += 0.02;
+
+        // Smoothly interpolate tilt angle toward target
+        const tiltDiff = viewState.targetTilt - perspectiveConfig.tiltAngle;
+        if (Math.abs(tiltDiff) > 0.001) {
+            perspectiveConfig.tiltAngle += tiltDiff * 0.08;  // Smooth easing
+        } else {
+            perspectiveConfig.tiltAngle = viewState.targetTilt;
+        }
 
         // Update positions
         updateSpherePositions();
