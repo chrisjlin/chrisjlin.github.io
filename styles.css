@@ -199,6 +199,56 @@ body {
 }
 
 /* ===================================
+   Launch Button
+   =================================== */
+.launch-btn {
+    position: fixed;
+    top: 24px;
+    right: 120px;
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    background: linear-gradient(135deg, rgba(20, 20, 40, 0.9) 0%, rgba(10, 10, 25, 0.95) 100%);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(100, 120, 160, 0.3);
+    border-radius: 4px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.launch-btn:hover {
+    color: var(--accent-primary);
+    border-color: rgba(255, 107, 0, 0.5);
+    box-shadow: 0 4px 25px rgba(255, 107, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.launch-btn:active {
+    transform: scale(0.95);
+}
+
+.launch-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.launch-btn svg {
+    transition: transform var(--transition-fast);
+}
+
+.launch-btn:hover svg {
+    transform: rotate(-45deg) translateX(2px) translateY(-2px);
+}
+
+/* ===================================
    Hint Text
    =================================== */
 .hint-text {

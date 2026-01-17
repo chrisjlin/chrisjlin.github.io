@@ -122,6 +122,26 @@ function initPuzzleNavigation() {
     let time = 0;
     let hoveredSphere = null;
     let isMobile = 'ontouchstart' in window || window.innerWidth < 768;
+
+    // Spacecraft state
+    const spacecraft = {
+        active: false,
+        x: 0,
+        y: 0,
+        startX: 0,
+        startY: 0,
+        endX: 0,
+        endY: 0,
+        progress: 0,        // 0 to 1 journey progress
+        fromPlanet: null,
+        toPlanet: null,
+        rotation: 0,        // Current rotation angle
+        trail: [],          // Engine trail
+        autoLaunch: false,  // Manual launch only
+        nextLaunchTime: -1, // -1 means no auto launch scheduled
+        journeyDuration: 300,  // Frames for journey
+        size: 8             // Slightly larger for visibility
+    };
     
     // Mobile scaling - reduce planet sizes on smaller screens
     const mobileScale = isMobile ? 0.6 : 1.0;
@@ -138,6 +158,7 @@ function initPuzzleNavigation() {
     const panelBackdrop = document.getElementById('panel-backdrop');
     const hintText = document.getElementById('hint-text');
     const viewToggle = document.getElementById('view-toggle');
+    const launchBtn = document.getElementById('launch-btn');
 
     // View state for smooth transitions
     const TILT_3D = 0.55;  // Isometric tilt
@@ -392,6 +413,16 @@ function initPuzzleNavigation() {
             const label = viewToggle.querySelector('.view-label');
             if (label) {
                 label.textContent = viewState.isFlat ? 'Iso' : '2D';
+            }
+        });
+    }
+
+    // Launch button handler
+    if (launchBtn) {
+        launchBtn.addEventListener('click', () => {
+            // Only launch if not already in flight
+            if (!spacecraft.active) {
+                launchSpacecraft();
             }
         });
     }
@@ -1387,6 +1418,238 @@ function initPuzzleNavigation() {
         
         // Hard boundary constraints
         constrainSpheresToCanvas();
+
+        // Update spacecraft
+        updateSpacecraft();
+    }
+
+    // Launch spacecraft from one planet to another
+    function launchSpacecraft() {
+        // Pick random departure and destination planets (different ones)
+        const fromIndex = Math.floor(Math.random() * spheres.length);
+        let toIndex = Math.floor(Math.random() * spheres.length);
+        while (toIndex === fromIndex) {
+            toIndex = Math.floor(Math.random() * spheres.length);
+        }
+
+        spacecraft.fromPlanet = spheres[fromIndex];
+        spacecraft.toPlanet = spheres[toIndex];
+        spacecraft.active = true;
+        spacecraft.progress = 0;
+        spacecraft.trail = [];
+
+        // Start position on the surface of departure planet
+        const angle = Math.atan2(
+            spacecraft.toPlanet.y - spacecraft.fromPlanet.y,
+            spacecraft.toPlanet.x - spacecraft.fromPlanet.x
+        );
+        spacecraft.startX = spacecraft.fromPlanet.x + Math.cos(angle) * spacecraft.fromPlanet.radius;
+        spacecraft.startY = spacecraft.fromPlanet.y + Math.sin(angle) * spacecraft.fromPlanet.radius;
+        spacecraft.x = spacecraft.startX;
+        spacecraft.y = spacecraft.startY;
+        spacecraft.rotation = angle;
+    }
+
+    // Update spacecraft position and state
+    function updateSpacecraft() {
+        // If not active, just wait (no auto-launch)
+        if (!spacecraft.active) {
+            return;
+        }
+
+        // Update journey progress
+        spacecraft.progress += 1 / spacecraft.journeyDuration;
+
+        if (spacecraft.progress >= 1) {
+            // Journey complete
+            spacecraft.active = false;
+            spacecraft.trail = [];
+            return;
+        }
+
+        // Get current positions of planets (they're moving!)
+        const fromX = spacecraft.fromPlanet.x;
+        const fromY = spacecraft.fromPlanet.y;
+        const toX = spacecraft.toPlanet.x;
+        const toY = spacecraft.toPlanet.y;
+
+        // Calculate direction from current departure to destination
+        const angle = Math.atan2(toY - fromY, toX - fromX);
+
+        // Start and end points on planet surfaces
+        const startX = fromX + Math.cos(angle) * spacecraft.fromPlanet.radius;
+        const startY = fromY + Math.sin(angle) * spacecraft.fromPlanet.radius;
+        const endX = toX - Math.cos(angle) * spacecraft.toPlanet.radius;
+        const endY = toY - Math.sin(angle) * spacecraft.toPlanet.radius;
+
+        // Use eased progress for smooth acceleration/deceleration
+        const t = spacecraft.progress;
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+        // Calculate arc height for trajectory (higher in the middle)
+        const arcHeight = Math.sin(t * Math.PI) * 40;
+
+        // Perpendicular direction for arc
+        const perpX = -Math.sin(angle);
+        const perpY = Math.cos(angle);
+
+        // Interpolate position along path with arc
+        spacecraft.x = startX + (endX - startX) * eased + perpX * arcHeight;
+        spacecraft.y = startY + (endY - startY) * eased + perpY * arcHeight;
+
+        // Update rotation to face direction of travel
+        if (spacecraft.trail.length > 0) {
+            const lastPos = spacecraft.trail[spacecraft.trail.length - 1];
+            spacecraft.rotation = Math.atan2(spacecraft.y - lastPos.y, spacecraft.x - lastPos.x);
+        } else {
+            spacecraft.rotation = angle;
+        }
+
+        // Add to trail
+        spacecraft.trail.push({ x: spacecraft.x, y: spacecraft.y, age: 0 });
+
+        // Limit trail length and age out old points
+        const maxTrail = 20;
+        if (spacecraft.trail.length > maxTrail) {
+            spacecraft.trail.shift();
+        }
+    }
+
+    // Draw the spacecraft as a 3D wireframe
+    function drawSpacecraft() {
+        if (!spacecraft.active) return;
+
+        const proj = projectToScreen(spacecraft.x, spacecraft.y);
+        const screenX = proj.x;
+        const screenY = proj.y;
+
+        // Scale size based on journey progress - smaller during takeoff/landing, larger in middle
+        // Uses sine curve for smooth altitude simulation
+        const altitudeScale = Math.sin(spacecraft.progress * Math.PI);
+        const minScale = 0.3;  // Minimum size when near planet surface
+        const sizeScale = minScale + (1 - minScale) * altitudeScale;
+        const size = spacecraft.size * proj.scale * sizeScale;
+
+        const tilt = perspectiveConfig.tiltAngle;
+
+        // Draw engine trail/exhaust (before the spacecraft)
+        ctx.save();
+        if (spacecraft.trail.length > 1) {
+            for (let i = 1; i < spacecraft.trail.length; i++) {
+                const pt = spacecraft.trail[i];
+                const prevPt = spacecraft.trail[i - 1];
+                const projPt = projectToScreen(pt.x, pt.y);
+                const projPrev = projectToScreen(prevPt.x, prevPt.y);
+
+                const alpha = (i / spacecraft.trail.length) * 0.7;
+                const width = (i / spacecraft.trail.length) * 4;
+
+                ctx.beginPath();
+                ctx.moveTo(projPrev.x, projPrev.y);
+                ctx.lineTo(projPt.x, projPt.y);
+                ctx.strokeStyle = `rgba(255, 150, 50, ${alpha})`;
+                ctx.lineWidth = width;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+
+        // 3D wireframe spacecraft - a simple elongated octahedron/rocket shape
+        // Define vertices in local 3D space (x = forward, y = right, z = up)
+        const len = size * 2;      // Length
+        const width = size * 0.6;  // Width
+        const height = size * 0.5; // Height
+
+        // Vertices: nose, tail, and 4 points around the middle
+        const vertices3D = [
+            { x: len, y: 0, z: 0 },           // 0: nose
+            { x: -len * 0.5, y: 0, z: 0 },    // 1: tail
+            { x: 0, y: width, z: 0 },         // 2: right
+            { x: 0, y: -width, z: 0 },        // 3: left
+            { x: 0, y: 0, z: height },        // 4: top
+            { x: 0, y: 0, z: -height },       // 5: bottom
+            // Fins
+            { x: -len * 0.3, y: width * 1.5, z: -height * 0.5 },   // 6: right fin
+            { x: -len * 0.3, y: -width * 1.5, z: -height * 0.5 },  // 7: left fin
+            { x: -len * 0.3, y: 0, z: height * 1.5 },              // 8: top fin
+        ];
+
+        // Edges to draw
+        const edges = [
+            // Main body
+            [0, 2], [0, 3], [0, 4], [0, 5],  // Nose to middle points
+            [1, 2], [1, 3], [1, 4], [1, 5],  // Tail to middle points
+            [2, 4], [4, 3], [3, 5], [5, 2],  // Middle ring
+            // Fins
+            [2, 6], [1, 6],  // Right fin
+            [3, 7], [1, 7],  // Left fin
+            [4, 8], [1, 8],  // Top fin
+        ];
+
+        // Transform vertices based on spacecraft rotation and perspective
+        const rot = spacecraft.rotation;
+        const cos45 = Math.cos(Math.PI / 4);
+        const sin45 = Math.sin(Math.PI / 4);
+        const cosR = Math.cos(rot);
+        const sinR = Math.sin(rot);
+
+        const projectedVertices = vertices3D.map(v => {
+            // Rotate around Z axis (yaw - direction of travel)
+            let x = v.x * cosR - v.y * sinR;
+            let y = v.x * sinR + v.y * cosR;
+            let z = v.z;
+
+            // Apply isometric rotation (45 degrees)
+            const isoX = x * cos45 - y * sin45;
+            const isoY = x * sin45 + y * cos45;
+
+            // Apply tilt compression (same as planets)
+            const compression = 1 - tilt;
+            const screenPosX = screenX + isoX;
+            const screenPosY = screenY + isoY * compression - z * 0.68 * (tilt / 0.55);
+
+            return { x: screenPosX, y: screenPosY, z: isoY };
+        });
+
+        // Draw wireframe edges
+        ctx.strokeStyle = 'rgba(180, 200, 220, 0.8)';
+        ctx.lineWidth = 1.2;
+        ctx.lineCap = 'round';
+
+        for (const [i, j] of edges) {
+            const v1 = projectedVertices[i];
+            const v2 = projectedVertices[j];
+
+            ctx.beginPath();
+            ctx.moveTo(v1.x, v1.y);
+            ctx.lineTo(v2.x, v2.y);
+            ctx.stroke();
+        }
+
+        // Draw vertices as small dots
+        ctx.fillStyle = 'rgba(220, 230, 255, 0.9)';
+        for (const v of projectedVertices) {
+            ctx.beginPath();
+            ctx.arc(v.x, v.y, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Engine glow at tail
+        const tailProj = projectedVertices[1];
+        const glowGradient = ctx.createRadialGradient(
+            tailProj.x, tailProj.y, 0,
+            tailProj.x, tailProj.y, size * 1.2
+        );
+        glowGradient.addColorStop(0, 'rgba(255, 200, 100, 0.8)');
+        glowGradient.addColorStop(0.3, 'rgba(255, 120, 50, 0.4)');
+        glowGradient.addColorStop(0.6, 'rgba(255, 80, 20, 0.2)');
+        glowGradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
+
+        ctx.beginPath();
+        ctx.arc(tailProj.x, tailProj.y, size * 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = glowGradient;
+        ctx.fill();
     }
 
     function updateSpherePositions() {
@@ -1455,6 +1718,9 @@ function initPuzzleNavigation() {
                 drawSphere(sphere);
             }
         }
+
+        // Draw spacecraft
+        drawSpacecraft();
 
         animationId = requestAnimationFrame(draw);
     }
