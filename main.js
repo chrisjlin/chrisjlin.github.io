@@ -123,24 +123,11 @@ function initPuzzleNavigation() {
     let hoveredSphere = null;
     let isMobile = 'ontouchstart' in window || window.innerWidth < 768;
 
-    // Spacecraft state
-    const spacecraft = {
-        active: false,
-        x: 0,
-        y: 0,
-        startX: 0,
-        startY: 0,
-        endX: 0,
-        endY: 0,
-        progress: 0,        // 0 to 1 journey progress
-        fromPlanet: null,
-        toPlanet: null,
-        rotation: 0,        // Current rotation angle
-        trail: [],          // Engine trail
-        autoLaunch: false,  // Manual launch only
-        nextLaunchTime: -1, // -1 means no auto launch scheduled
-        journeyDuration: 300,  // Frames for journey
-        size: 8             // Slightly larger for visibility
+    // Spacecraft array - supports multiple spacecraft in flight
+    const spacecrafts = [];
+    const spacecraftConfig = {
+        journeyDuration: 900,  // Frames for journey - slower than planetary orbits (like real spacecraft)
+        size: 8                // Slightly larger for visibility
     };
     
     // Mobile scaling - reduce planet sizes on smaller screens
@@ -283,6 +270,45 @@ function initPuzzleNavigation() {
         sphere.y = sphere.orbitCenterY + x * sinT + y * cosT;
     }
 
+    // Predict planet position after framesAhead frames
+    // Simulates orbital motion frame-by-frame to account for:
+    // - Elliptical orbit shape
+    // - Variable angular velocity (Kepler's 2nd law)
+    // - Orbit tilt rotation
+    function predictPlanetPosition(planet, framesAhead) {
+        const a = planet.semiMajorAxis * planet.orbitScale;
+        const e = planet.eccentricity;
+        const b = a * Math.sqrt(1 - e * e);
+
+        // Simulate orbital motion frame by frame
+        let angle = planet.angle;
+        for (let i = 0; i < framesAhead; i++) {
+            // Calculate radius at current angle (ellipse equation)
+            const r = a * (1 - e * e) / (1 + e * Math.cos(angle));
+
+            // Calculate Kepler factor (faster when closer)
+            const keplerFactor = (a / r) * (a / r);
+            const angularVel = planet.baseAngularVelocity * Math.sqrt(keplerFactor);
+
+            // Advance angle
+            angle += angularVel;
+        }
+
+        // Calculate position on ellipse at predicted angle
+        const x = a * Math.cos(angle);
+        const y = b * Math.sin(angle);
+
+        // Apply orbit tilt rotation
+        const cosT = Math.cos(planet.orbitTilt);
+        const sinT = Math.sin(planet.orbitTilt);
+
+        return {
+            x: planet.orbitCenterX + x * cosT - y * sinT,
+            y: planet.orbitCenterY + x * sinT + y * cosT,
+            angle: angle
+        };
+    }
+
     // Find sphere at position (uses screen coordinates when in perspective mode)
     function getSphereAtPosition(x, y) {
         for (let i = spheres.length - 1; i >= 0; i--) {
@@ -420,8 +446,8 @@ function initPuzzleNavigation() {
     // Launch button handler
     if (launchBtn) {
         launchBtn.addEventListener('click', () => {
-            // Only launch if not already in flight
-            if (!spacecraft.active) {
+            // Limit to 3 concurrent spacecraft
+            if (spacecrafts.length < 3) {
                 launchSpacecraft();
             }
         });
@@ -1423,7 +1449,8 @@ function initPuzzleNavigation() {
         updateSpacecraft();
     }
 
-    // Launch spacecraft from one planet to another
+    // Launch spacecraft using Hohmann transfer orbit
+    // Strategy: Calculate where both planets WILL BE after countdown, then plan transfer between those positions
     function launchSpacecraft() {
         // Pick random departure and destination planets (different ones)
         const fromIndex = Math.floor(Math.random() * spheres.length);
@@ -1432,224 +1459,433 @@ function initPuzzleNavigation() {
             toIndex = Math.floor(Math.random() * spheres.length);
         }
 
-        spacecraft.fromPlanet = spheres[fromIndex];
-        spacecraft.toPlanet = spheres[toIndex];
-        spacecraft.active = true;
-        spacecraft.progress = 0;
-        spacecraft.trail = [];
+        const fromPlanet = spheres[fromIndex];
+        const toPlanet = spheres[toIndex];
 
-        // Start position on the surface of departure planet
-        const angle = Math.atan2(
-            spacecraft.toPlanet.y - spacecraft.fromPlanet.y,
-            spacecraft.toPlanet.x - spacecraft.fromPlanet.x
+        // Get orbit radii for Hohmann transfer calculation
+        const r1 = fromPlanet.semiMajorAxis * fromPlanet.orbitScale;
+        const r2 = toPlanet.semiMajorAxis * toPlanet.orbitScale;
+
+        // Hohmann transfer orbit parameters
+        const transferA = (r1 + r2) / 2;
+        const transferE = Math.abs(r2 - r1) / (r2 + r1);
+
+        // Calculate transfer time (frames) using Kepler's 3rd law (simplified)
+        const baseTransferFrames = 400;
+        const transferTime = baseTransferFrames * Math.pow(transferA / Math.min(r1, r2), 1.5);
+
+        // Countdown duration in frames (~3 seconds at 60fps)
+        const countdownFrames = 180;
+
+        // Step 1: Predict where DEPARTURE planet will be AFTER countdown (launch moment)
+        // Uses accurate elliptical orbit simulation with Kepler's 2nd law
+        const departurePrediction = predictPlanetPosition(fromPlanet, countdownFrames);
+        const departurePosAtLaunch = {
+            x: departurePrediction.x,
+            y: departurePrediction.y
+        };
+        const departureAngleAtLaunch = departurePrediction.angle;
+
+        // Step 2: Predict where DESTINATION planet will be at ARRIVAL (after countdown + transfer)
+        // Uses accurate elliptical orbit simulation with Kepler's 2nd law
+        const totalFrames = countdownFrames + transferTime;
+        const arrivalPrediction = predictPlanetPosition(toPlanet, totalFrames);
+        const arrivalPosAtEnd = {
+            x: arrivalPrediction.x,
+            y: arrivalPrediction.y
+        };
+        const arrivalAngleAtEnd = arrivalPrediction.angle;
+
+        // Step 3: Calculate launch angle from future departure to future arrival
+        const launchAngle = Math.atan2(
+            arrivalPosAtEnd.y - departurePosAtLaunch.y,
+            arrivalPosAtEnd.x - departurePosAtLaunch.x
         );
-        spacecraft.startX = spacecraft.fromPlanet.x + Math.cos(angle) * spacecraft.fromPlanet.radius;
-        spacecraft.startY = spacecraft.fromPlanet.y + Math.sin(angle) * spacecraft.fromPlanet.radius;
-        spacecraft.x = spacecraft.startX;
-        spacecraft.y = spacecraft.startY;
-        spacecraft.rotation = angle;
+
+        // Determine if we're going outward (to larger orbit) or inward
+        const goingOutward = r2 > r1;
+
+        // Create new spacecraft with countdown active
+        // During countdown, spacecraft follows departure planet until it reaches departurePosAtLaunch
+        const newSpacecraft = {
+            active: true,
+            x: fromPlanet.x + Math.cos(launchAngle) * fromPlanet.radius,
+            y: fromPlanet.y + Math.sin(launchAngle) * fromPlanet.radius,
+            progress: 0,
+            fromPlanet: fromPlanet,
+            toPlanet: toPlanet,
+            rotation: launchAngle,
+            trail: [],
+            journeyDuration: transferTime,
+            size: spacecraftConfig.size,
+
+            // Countdown state
+            countdownActive: true,
+            countdownStart: Date.now(),
+            countdownDuration: 3000, // 3 seconds
+
+            // Hohmann transfer parameters (fixed - calculated for future positions)
+            transferOrbit: {
+                semiMajorAxis: transferA,
+                eccentricity: transferE,
+                semiMinorAxis: transferA * Math.sqrt(1 - transferE * transferE),
+                departureOrbitRadius: r1,
+                arrivalOrbitRadius: r2,
+                goingOutward: goingOutward,
+            },
+
+            // These are the FUTURE positions where transfer will occur
+            // departurePos = where departure planet will be when countdown ends
+            // arrivalPos = where destination planet will be when spacecraft arrives
+            departurePos: departurePosAtLaunch,
+            arrivalPos: arrivalPosAtEnd,
+            departureAngle: departureAngleAtLaunch,
+            arrivalAngle: arrivalAngleAtEnd,
+            launchAngle: launchAngle,
+        };
+
+        spacecrafts.push(newSpacecraft);
     }
 
-    // Update spacecraft position and state
+    // Update all spacecraft positions and state
     function updateSpacecraft() {
-        // If not active, just wait (no auto-launch)
-        if (!spacecraft.active) {
-            return;
-        }
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
 
-        // Update journey progress
-        spacecraft.progress += 1 / spacecraft.journeyDuration;
+        // Update each spacecraft and remove completed ones
+        for (let i = spacecrafts.length - 1; i >= 0; i--) {
+            const craft = spacecrafts[i];
 
-        if (spacecraft.progress >= 1) {
-            // Journey complete
-            spacecraft.active = false;
-            spacecraft.trail = [];
-            return;
-        }
+            // Handle countdown phase
+            // Spacecraft follows departure planet, pointing toward the pre-calculated arrival position
+            if (craft.countdownActive) {
+                const elapsed = Date.now() - craft.countdownStart;
+                if (elapsed < craft.countdownDuration) {
+                    // Still counting down - spacecraft rides on departure planet surface
+                    // Point toward the fixed arrival position (where destination will be at journey end)
+                    const launchAngle = Math.atan2(
+                        craft.arrivalPos.y - craft.fromPlanet.y,
+                        craft.arrivalPos.x - craft.fromPlanet.x
+                    );
+                    craft.x = craft.fromPlanet.x + Math.cos(launchAngle) * craft.fromPlanet.radius;
+                    craft.y = craft.fromPlanet.y + Math.sin(launchAngle) * craft.fromPlanet.radius;
+                    craft.rotation = launchAngle;
+                    continue;
+                }
+                // Countdown complete - launch! No recalculation needed.
+                // departurePos and arrivalPos were pre-calculated for this exact moment
+                craft.countdownActive = false;
+                craft.progress = 0;
+            }
 
-        // Get current positions of planets (they're moving!)
-        const fromX = spacecraft.fromPlanet.x;
-        const fromY = spacecraft.fromPlanet.y;
-        const toX = spacecraft.toPlanet.x;
-        const toY = spacecraft.toPlanet.y;
+            // Update journey progress
+            craft.progress += 1 / craft.journeyDuration;
 
-        // Calculate direction from current departure to destination
-        const angle = Math.atan2(toY - fromY, toX - fromX);
+            if (craft.progress >= 1) {
+                // Journey complete - remove from array
+                spacecrafts.splice(i, 1);
+                continue;
+            }
 
-        // Start and end points on planet surfaces
-        const startX = fromX + Math.cos(angle) * spacecraft.fromPlanet.radius;
-        const startY = fromY + Math.sin(angle) * spacecraft.fromPlanet.radius;
-        const endX = toX - Math.cos(angle) * spacecraft.toPlanet.radius;
-        const endY = toY - Math.sin(angle) * spacecraft.toPlanet.radius;
+            // Calculate position on Hohmann transfer ellipse
+            // The ellipse is centered on the sun, with departure at one end and arrival at the other
+            const t = craft.progress;
+            const transfer = craft.transferOrbit;
 
-        // Use eased progress for smooth acceleration/deceleration
-        const t = spacecraft.progress;
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            // Departure and arrival angles relative to sun center
+            const depAngle = Math.atan2(craft.departurePos.y - centerY, craft.departurePos.x - centerX);
+            const arrAngle = Math.atan2(craft.arrivalPos.y - centerY, craft.arrivalPos.x - centerX);
 
-        // Calculate arc height for trajectory (higher in the middle)
-        const arcHeight = Math.sin(t * Math.PI) * 40;
+            // Interpolate angle around the transfer orbit
+            // For Hohmann transfer, we go approximately 180 degrees around
+            let angleDiff = arrAngle - depAngle;
+            // Normalize to go the "long way" around (Hohmann is ~180 degrees)
+            if (transfer.goingOutward) {
+                // Going outward: travel counterclockwise (positive angle direction)
+                if (angleDiff <= 0) angleDiff += 2 * Math.PI;
+            } else {
+                // Going inward: travel clockwise (negative angle direction)
+                if (angleDiff >= 0) angleDiff -= 2 * Math.PI;
+            }
 
-        // Perpendicular direction for arc
-        const perpX = -Math.sin(angle);
-        const perpY = Math.cos(angle);
+            // Current angle along the transfer
+            const currentAngle = depAngle + angleDiff * t;
 
-        // Interpolate position along path with arc
-        spacecraft.x = startX + (endX - startX) * eased + perpX * arcHeight;
-        spacecraft.y = startY + (endY - startY) * eased + perpY * arcHeight;
+            // Calculate radius at this point on the ellipse using the vis-viva style approach
+            // r = a(1 - e²) / (1 + e*cos(θ)) where θ is true anomaly
+            // For simplicity, interpolate between departure and arrival radii with elliptical curve
+            const r1 = transfer.departureOrbitRadius;
+            const r2 = transfer.arrivalOrbitRadius;
 
-        // Update rotation to face direction of travel
-        if (spacecraft.trail.length > 0) {
-            const lastPos = spacecraft.trail[spacecraft.trail.length - 1];
-            spacecraft.rotation = Math.atan2(spacecraft.y - lastPos.y, spacecraft.x - lastPos.x);
-        } else {
-            spacecraft.rotation = angle;
-        }
+            // Use sine interpolation for smooth elliptical radius change
+            // At t=0: r=r1, at t=0.5: r is at extreme (periapsis or apoapsis), at t=1: r=r2
+            const radiusT = Math.sin(t * Math.PI / 2); // 0 to 1 over the journey
+            const currentRadius = r1 + (r2 - r1) * radiusT;
 
-        // Add to trail
-        spacecraft.trail.push({ x: spacecraft.x, y: spacecraft.y, age: 0 });
+            // Position on transfer orbit
+            craft.x = centerX + currentRadius * Math.cos(currentAngle);
+            craft.y = centerY + currentRadius * Math.sin(currentAngle);
 
-        // Limit trail length and age out old points
-        const maxTrail = 20;
-        if (spacecraft.trail.length > maxTrail) {
-            spacecraft.trail.shift();
-        }
-    }
+            // Update rotation to face direction of travel
+            if (craft.trail.length > 0) {
+                const lastPos = craft.trail[craft.trail.length - 1];
+                const dx = craft.x - lastPos.x;
+                const dy = craft.y - lastPos.y;
+                if (dx !== 0 || dy !== 0) {
+                    craft.rotation = Math.atan2(dy, dx);
+                }
+            } else {
+                craft.rotation = craft.launchAngle;
+            }
 
-    // Draw the spacecraft as a 3D wireframe
-    function drawSpacecraft() {
-        if (!spacecraft.active) return;
+            // Add to trail
+            craft.trail.push({ x: craft.x, y: craft.y, age: 0 });
 
-        const proj = projectToScreen(spacecraft.x, spacecraft.y);
-        const screenX = proj.x;
-        const screenY = proj.y;
-
-        // Scale size based on journey progress - smaller during takeoff/landing, larger in middle
-        // Uses sine curve for smooth altitude simulation
-        const altitudeScale = Math.sin(spacecraft.progress * Math.PI);
-        const minScale = 0.3;  // Minimum size when near planet surface
-        const sizeScale = minScale + (1 - minScale) * altitudeScale;
-        const size = spacecraft.size * proj.scale * sizeScale;
-
-        const tilt = perspectiveConfig.tiltAngle;
-
-        // Draw engine trail/exhaust (before the spacecraft)
-        ctx.save();
-        if (spacecraft.trail.length > 1) {
-            for (let i = 1; i < spacecraft.trail.length; i++) {
-                const pt = spacecraft.trail[i];
-                const prevPt = spacecraft.trail[i - 1];
-                const projPt = projectToScreen(pt.x, pt.y);
-                const projPrev = projectToScreen(prevPt.x, prevPt.y);
-
-                const alpha = (i / spacecraft.trail.length) * 0.7;
-                const width = (i / spacecraft.trail.length) * 4;
-
-                ctx.beginPath();
-                ctx.moveTo(projPrev.x, projPrev.y);
-                ctx.lineTo(projPt.x, projPt.y);
-                ctx.strokeStyle = `rgba(255, 150, 50, ${alpha})`;
-                ctx.lineWidth = width;
-                ctx.lineCap = 'round';
-                ctx.stroke();
+            // Limit trail length and age out old points
+            const maxTrail = 20;
+            if (craft.trail.length > maxTrail) {
+                craft.trail.shift();
             }
         }
-        ctx.restore();
+    }
 
-        // 3D wireframe spacecraft - a simple elongated octahedron/rocket shape
-        // Define vertices in local 3D space (x = forward, y = right, z = up)
-        const len = size * 2;      // Length
-        const width = size * 0.6;  // Width
-        const height = size * 0.5; // Height
-
-        // Vertices: nose, tail, and 4 points around the middle
-        const vertices3D = [
-            { x: len, y: 0, z: 0 },           // 0: nose
-            { x: -len * 0.5, y: 0, z: 0 },    // 1: tail
-            { x: 0, y: width, z: 0 },         // 2: right
-            { x: 0, y: -width, z: 0 },        // 3: left
-            { x: 0, y: 0, z: height },        // 4: top
-            { x: 0, y: 0, z: -height },       // 5: bottom
-            // Fins
-            { x: -len * 0.3, y: width * 1.5, z: -height * 0.5 },   // 6: right fin
-            { x: -len * 0.3, y: -width * 1.5, z: -height * 0.5 },  // 7: left fin
-            { x: -len * 0.3, y: 0, z: height * 1.5 },              // 8: top fin
-        ];
-
-        // Edges to draw
-        const edges = [
-            // Main body
-            [0, 2], [0, 3], [0, 4], [0, 5],  // Nose to middle points
-            [1, 2], [1, 3], [1, 4], [1, 5],  // Tail to middle points
-            [2, 4], [4, 3], [3, 5], [5, 2],  // Middle ring
-            // Fins
-            [2, 6], [1, 6],  // Right fin
-            [3, 7], [1, 7],  // Left fin
-            [4, 8], [1, 8],  // Top fin
-        ];
-
-        // Transform vertices based on spacecraft rotation and perspective
-        const rot = spacecraft.rotation;
+    // Draw all spacecraft as 3D wireframes
+    function drawSpacecraft() {
+        const tilt = perspectiveConfig.tiltAngle;
         const cos45 = Math.cos(Math.PI / 4);
         const sin45 = Math.sin(Math.PI / 4);
-        const cosR = Math.cos(rot);
-        const sinR = Math.sin(rot);
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
 
-        const projectedVertices = vertices3D.map(v => {
-            // Rotate around Z axis (yaw - direction of travel)
-            let x = v.x * cosR - v.y * sinR;
-            let y = v.x * sinR + v.y * cosR;
-            let z = v.z;
+        for (const craft of spacecrafts) {
+            const proj = projectToScreen(craft.x, craft.y);
+            const screenX = proj.x;
+            const screenY = proj.y;
 
-            // Apply isometric rotation (45 degrees)
-            const isoX = x * cos45 - y * sin45;
-            const isoY = x * sin45 + y * cos45;
+            // Draw countdown visualization if active
+            if (craft.countdownActive) {
+                const elapsed = Date.now() - craft.countdownStart;
+                const remaining = Math.ceil((craft.countdownDuration - elapsed) / 1000);
 
-            // Apply tilt compression (same as planets)
-            const compression = 1 - tilt;
-            const screenPosX = screenX + isoX;
-            const screenPosY = screenY + isoY * compression - z * 0.68 * (tilt / 0.55);
+                // Draw countdown number above spacecraft
+                ctx.save();
+                ctx.font = 'bold 20px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
 
-            return { x: screenPosX, y: screenPosY, z: isoY };
-        });
+                // Pulsing effect
+                const pulse = 1 + 0.15 * Math.sin(elapsed * 0.015);
 
-        // Draw wireframe edges
-        ctx.strokeStyle = 'rgba(180, 200, 220, 0.8)';
-        ctx.lineWidth = 1.2;
-        ctx.lineCap = 'round';
+                // Outer glow
+                ctx.shadowColor = 'rgba(255, 180, 80, 0.8)';
+                ctx.shadowBlur = 15 * pulse;
+                ctx.fillStyle = `rgba(255, 200, 100, ${0.9})`;
+                ctx.fillText(remaining.toString(), screenX, screenY - 30);
+                ctx.shadowBlur = 0;
 
-        for (const [i, j] of edges) {
-            const v1 = projectedVertices[i];
-            const v2 = projectedVertices[j];
+                // Draw pulsing ring around spacecraft
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, 18 * pulse, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255, 150, 50, ${0.4 + 0.3 * Math.sin(elapsed * 0.012)})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Draw expanding rings
+                const ringPhase = (elapsed % 1000) / 1000;
+                const ringRadius = 15 + ringPhase * 25;
+                const ringAlpha = 0.5 * (1 - ringPhase);
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, ringRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255, 180, 100, ${ringAlpha})`;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                ctx.restore();
+            }
+
+            // Scale size based on journey progress - smaller during takeoff/landing, larger in middle
+            // Uses sine curve for smooth altitude simulation
+            const effectiveProgress = craft.countdownActive ? 0 : craft.progress;
+            const altitudeScale = Math.sin(effectiveProgress * Math.PI);
+            const minScale = 0.3;  // Minimum size when near planet surface
+            const sizeScale = minScale + (1 - minScale) * altitudeScale;
+            const size = craft.size * proj.scale * sizeScale;
+
+            // Draw projected Hohmann transfer path as dotted ellipse
+            ctx.save();
+            const transfer = craft.transferOrbit;
+
+            // Calculate path parameters (same as updateSpacecraft)
+            const depAngle = Math.atan2(craft.departurePos.y - centerY, craft.departurePos.x - centerX);
+            const arrAngle = Math.atan2(craft.arrivalPos.y - centerY, craft.arrivalPos.x - centerX);
+
+            let angleDiff = arrAngle - depAngle;
+            if (transfer.goingOutward) {
+                if (angleDiff <= 0) angleDiff += 2 * Math.PI;
+            } else {
+                if (angleDiff >= 0) angleDiff -= 2 * Math.PI;
+            }
+
+            const r1 = transfer.departureOrbitRadius;
+            const r2 = transfer.arrivalOrbitRadius;
+
+            // Draw dots along the remaining transfer path
+            const numDots = 35;
+            const startProgress = craft.countdownActive ? 0 : craft.progress;
+            for (let i = 0; i < numDots; i++) {
+                const dotProgress = startProgress + (1 - startProgress) * (i / numDots);
+
+                // Calculate position on Hohmann ellipse (same as spacecraft movement)
+                const currentAngle = depAngle + angleDiff * dotProgress;
+                const radiusT = Math.sin(dotProgress * Math.PI / 2);
+                const currentRadius = r1 + (r2 - r1) * radiusT;
+
+                const dotX = centerX + currentRadius * Math.cos(currentAngle);
+                const dotY = centerY + currentRadius * Math.sin(currentAngle);
+
+                const dotProj = projectToScreen(dotX, dotY);
+
+                // Fade dots based on distance from spacecraft (not journey progress)
+                // Dots closer to spacecraft are brighter, dots near destination are dimmer
+                const fadeProgress = i / numDots;
+                const alpha = 0.5 * (1 - fadeProgress * 0.7);
+
+                ctx.beginPath();
+                ctx.arc(dotProj.x, dotProj.y, 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(150, 180, 220, ${alpha})`;
+                ctx.fill();
+            }
+
+            // Draw destination marker (where planet will be at arrival)
+            // Stays visible throughout the journey, fading slightly near the end
+            const destAlpha = craft.progress > 0.9 ? (1 - craft.progress) * 10 : 1;
+            if (destAlpha > 0) {
+                const destProj = projectToScreen(craft.arrivalPos.x, craft.arrivalPos.y);
+                ctx.beginPath();
+                ctx.arc(destProj.x, destProj.y, 4, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(100, 200, 150, ${(0.4 + 0.2 * Math.sin(Date.now() * 0.005)) * destAlpha})`;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // Draw engine trail/exhaust (before the spacecraft)
+            ctx.save();
+            if (craft.trail.length > 1) {
+                for (let i = 1; i < craft.trail.length; i++) {
+                    const pt = craft.trail[i];
+                    const prevPt = craft.trail[i - 1];
+                    const projPt = projectToScreen(pt.x, pt.y);
+                    const projPrev = projectToScreen(prevPt.x, prevPt.y);
+
+                    const alpha = (i / craft.trail.length) * 0.7;
+                    const width = (i / craft.trail.length) * 4;
+
+                    ctx.beginPath();
+                    ctx.moveTo(projPrev.x, projPrev.y);
+                    ctx.lineTo(projPt.x, projPt.y);
+                    ctx.strokeStyle = `rgba(255, 150, 50, ${alpha})`;
+                    ctx.lineWidth = width;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+
+            // 3D wireframe spacecraft - a simple elongated octahedron/rocket shape
+            // Define vertices in local 3D space (x = forward, y = right, z = up)
+            const len = size * 2;      // Length
+            const craftWidth = size * 0.6;  // Width
+            const height = size * 0.5; // Height
+
+            // Vertices: nose, tail, and 4 points around the middle
+            const vertices3D = [
+                { x: len, y: 0, z: 0 },           // 0: nose
+                { x: -len * 0.5, y: 0, z: 0 },    // 1: tail
+                { x: 0, y: craftWidth, z: 0 },         // 2: right
+                { x: 0, y: -craftWidth, z: 0 },        // 3: left
+                { x: 0, y: 0, z: height },        // 4: top
+                { x: 0, y: 0, z: -height },       // 5: bottom
+                // Fins
+                { x: -len * 0.3, y: craftWidth * 1.5, z: -height * 0.5 },   // 6: right fin
+                { x: -len * 0.3, y: -craftWidth * 1.5, z: -height * 0.5 },  // 7: left fin
+                { x: -len * 0.3, y: 0, z: height * 1.5 },              // 8: top fin
+            ];
+
+            // Edges to draw
+            const edges = [
+                // Main body
+                [0, 2], [0, 3], [0, 4], [0, 5],  // Nose to middle points
+                [1, 2], [1, 3], [1, 4], [1, 5],  // Tail to middle points
+                [2, 4], [4, 3], [3, 5], [5, 2],  // Middle ring
+                // Fins
+                [2, 6], [1, 6],  // Right fin
+                [3, 7], [1, 7],  // Left fin
+                [4, 8], [1, 8],  // Top fin
+            ];
+
+            // Transform vertices based on spacecraft rotation and perspective
+            const rot = craft.rotation;
+            const cosR = Math.cos(rot);
+            const sinR = Math.sin(rot);
+
+            const projectedVertices = vertices3D.map(v => {
+                // Rotate around Z axis (yaw - direction of travel)
+                let x = v.x * cosR - v.y * sinR;
+                let y = v.x * sinR + v.y * cosR;
+                let z = v.z;
+
+                // Apply isometric rotation (45 degrees)
+                const isoX = x * cos45 - y * sin45;
+                const isoY = x * sin45 + y * cos45;
+
+                // Apply tilt compression (same as planets)
+                const compression = 1 - tilt;
+                const screenPosX = screenX + isoX;
+                const screenPosY = screenY + isoY * compression - z * 0.68 * (tilt / 0.55);
+
+                return { x: screenPosX, y: screenPosY, z: isoY };
+            });
+
+            // Draw wireframe edges
+            ctx.strokeStyle = 'rgba(180, 200, 220, 0.8)';
+            ctx.lineWidth = 1.2;
+            ctx.lineCap = 'round';
+
+            for (const [i, j] of edges) {
+                const v1 = projectedVertices[i];
+                const v2 = projectedVertices[j];
+
+                ctx.beginPath();
+                ctx.moveTo(v1.x, v1.y);
+                ctx.lineTo(v2.x, v2.y);
+                ctx.stroke();
+            }
+
+            // Draw vertices as small dots
+            ctx.fillStyle = 'rgba(220, 230, 255, 0.9)';
+            for (const v of projectedVertices) {
+                ctx.beginPath();
+                ctx.arc(v.x, v.y, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Engine glow at tail
+            const tailProj = projectedVertices[1];
+            const glowGradient = ctx.createRadialGradient(
+                tailProj.x, tailProj.y, 0,
+                tailProj.x, tailProj.y, size * 1.2
+            );
+            glowGradient.addColorStop(0, 'rgba(255, 200, 100, 0.8)');
+            glowGradient.addColorStop(0.3, 'rgba(255, 120, 50, 0.4)');
+            glowGradient.addColorStop(0.6, 'rgba(255, 80, 20, 0.2)');
+            glowGradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
 
             ctx.beginPath();
-            ctx.moveTo(v1.x, v1.y);
-            ctx.lineTo(v2.x, v2.y);
-            ctx.stroke();
-        }
-
-        // Draw vertices as small dots
-        ctx.fillStyle = 'rgba(220, 230, 255, 0.9)';
-        for (const v of projectedVertices) {
-            ctx.beginPath();
-            ctx.arc(v.x, v.y, 1.5, 0, Math.PI * 2);
+            ctx.arc(tailProj.x, tailProj.y, size * 1.2, 0, Math.PI * 2);
+            ctx.fillStyle = glowGradient;
             ctx.fill();
         }
-
-        // Engine glow at tail
-        const tailProj = projectedVertices[1];
-        const glowGradient = ctx.createRadialGradient(
-            tailProj.x, tailProj.y, 0,
-            tailProj.x, tailProj.y, size * 1.2
-        );
-        glowGradient.addColorStop(0, 'rgba(255, 200, 100, 0.8)');
-        glowGradient.addColorStop(0.3, 'rgba(255, 120, 50, 0.4)');
-        glowGradient.addColorStop(0.6, 'rgba(255, 80, 20, 0.2)');
-        glowGradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
-
-        ctx.beginPath();
-        ctx.arc(tailProj.x, tailProj.y, size * 1.2, 0, Math.PI * 2);
-        ctx.fillStyle = glowGradient;
-        ctx.fill();
     }
 
     function updateSpherePositions() {
