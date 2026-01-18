@@ -1557,23 +1557,25 @@ function initPuzzleNavigation() {
             const craft = spacecrafts[i];
 
             // Handle countdown phase
-            // Spacecraft follows departure planet, pointing toward the pre-calculated arrival position
+            // Spacecraft follows departure planet, facing along the Hohmann transfer path
             if (craft.countdownActive) {
                 const elapsed = Date.now() - craft.countdownStart;
                 if (elapsed < craft.countdownDuration) {
                     // Still counting down - spacecraft rides on departure planet surface
-                    // Point toward the fixed arrival position (where destination will be at journey end)
-                    const launchAngle = Math.atan2(
-                        craft.arrivalPos.y - craft.fromPlanet.y,
-                        craft.arrivalPos.x - craft.fromPlanet.x
-                    );
-                    craft.x = craft.fromPlanet.x + Math.cos(launchAngle) * craft.fromPlanet.radius;
-                    craft.y = craft.fromPlanet.y + Math.sin(launchAngle) * craft.fromPlanet.radius;
-                    craft.rotation = launchAngle;
+                    // Face tangent to orbit (perpendicular to sun-planet line) in direction of travel
+                    const radialAngle = Math.atan2(craft.fromPlanet.y - centerY, craft.fromPlanet.x - centerX);
+                    // Tangent direction: +90° for counterclockwise (outward), -90° for clockwise (inward)
+                    const tangentAngle = craft.transferOrbit.goingOutward
+                        ? radialAngle + Math.PI / 2
+                        : radialAngle - Math.PI / 2;
+                    craft.x = craft.fromPlanet.x + Math.cos(tangentAngle) * craft.fromPlanet.radius;
+                    craft.y = craft.fromPlanet.y + Math.sin(tangentAngle) * craft.fromPlanet.radius;
+                    craft.rotation = tangentAngle;
                     continue;
                 }
-                // Countdown complete - launch! No recalculation needed.
-                // departurePos and arrivalPos were pre-calculated for this exact moment
+                // Countdown complete - launch!
+                // Update departurePos to actual planet position so spacecraft lifts off from where it's sitting
+                craft.departurePos = { x: craft.fromPlanet.x, y: craft.fromPlanet.y };
                 craft.countdownActive = false;
                 craft.progress = 0;
             }
@@ -1625,6 +1627,23 @@ function initPuzzleNavigation() {
             // Position on transfer orbit
             craft.x = centerX + currentRadius * Math.cos(currentAngle);
             craft.y = centerY + currentRadius * Math.sin(currentAngle);
+
+            // Landing phase - smoothly blend toward actual planet surface in final 10% of journey
+            const landingThreshold = 0.9;
+            if (t > landingThreshold) {
+                const landingProgress = (t - landingThreshold) / (1 - landingThreshold);
+                // Use smoothstep easing for natural deceleration
+                const easedProgress = landingProgress * landingProgress * (3 - 2 * landingProgress);
+
+                // Calculate landing point on planet surface - use approach angle from current position
+                const approachAngle = Math.atan2(craft.y - craft.toPlanet.y, craft.x - craft.toPlanet.x);
+                const surfaceX = craft.toPlanet.x + Math.cos(approachAngle) * craft.toPlanet.radius;
+                const surfaceY = craft.toPlanet.y + Math.sin(approachAngle) * craft.toPlanet.radius;
+
+                // Blend between calculated orbit position and landing position
+                craft.x = craft.x + (surfaceX - craft.x) * easedProgress;
+                craft.y = craft.y + (surfaceY - craft.y) * easedProgress;
+            }
 
             // Update rotation to face direction of travel
             if (craft.trail.length > 0) {
