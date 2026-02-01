@@ -167,7 +167,11 @@
 
     // Update last updated timestamp
     function updateLastUpdated(fetchedAt) {
-        const date = fetchedAt ? new Date(fetchedAt) : new Date();
+        if (!fetchedAt) {
+            lastUpdatedEl.textContent = 'Unknown';
+            return;
+        }
+        const date = new Date(fetchedAt);
         lastUpdatedEl.textContent = date.toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
