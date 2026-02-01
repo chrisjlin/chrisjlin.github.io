@@ -189,6 +189,18 @@ async function fetchFeed(source, cutoffDate) {
     return posts;
 }
 
+// Format author: show feed owner first, add byline author if different
+function formatAuthor(feedOwner, bylineAuthor) {
+    if (!bylineAuthor || bylineAuthor.toLowerCase() === feedOwner.toLowerCase()) {
+        return feedOwner;
+    }
+    // Check if byline already contains the feed owner's name
+    if (bylineAuthor.toLowerCase().includes(feedOwner.toLowerCase())) {
+        return bylineAuthor;
+    }
+    return `${feedOwner} (ft. ${bylineAuthor})`;
+}
+
 // Parse RSS 2.0 feed
 function parseRSS(xml, source) {
     const posts = [];
@@ -202,13 +214,16 @@ function parseRSS(xml, source) {
         const link = extractTag(item, 'link') || extractTag(item, 'guid');
         const pubDate = extractTag(item, 'pubDate');
         const creator = extractTag(item, 'dc:creator') || extractTag(item, 'author');
+        const bylineAuthor = cleanText(creator);
+        // Show feed owner first, add byline author if different
+        const author = formatAuthor(source.name, bylineAuthor);
 
         if (title && link) {
             posts.push({
                 title: cleanText(title),
                 url: cleanText(link),
                 date: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
-                author: cleanText(creator) || source.name,
+                author: author,
                 source: source.source
             });
         }
@@ -233,13 +248,16 @@ function parseAtom(xml, source) {
         const link = linkMatch ? linkMatch[1] : null;
         const published = extractTag(entry, 'published') || extractTag(entry, 'updated');
         const authorName = extractTag(entry, 'name');
+        const bylineAuthor = cleanText(authorName);
+        // Show feed owner first, add byline author if different
+        const author = formatAuthor(source.name, bylineAuthor);
 
         if (title && link) {
             posts.push({
                 title: cleanText(title),
                 url: cleanText(link),
                 date: published ? new Date(published).toISOString() : new Date().toISOString(),
-                author: cleanText(authorName) || source.name,
+                author: author,
                 source: source.source
             });
         }
