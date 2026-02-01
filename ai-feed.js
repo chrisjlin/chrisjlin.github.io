@@ -63,7 +63,7 @@
             feedData = data.posts || [];
             populateAuthorFilter();
             renderFeed();
-            updateLastUpdated();
+            updateLastUpdated(data.fetchedAt);
 
         } catch (error) {
             console.error('Failed to load feed:', error);
@@ -166,9 +166,11 @@
     }
 
     // Update last updated timestamp
-    function updateLastUpdated() {
-        const now = new Date();
-        lastUpdatedEl.textContent = now.toLocaleTimeString('en-US', {
+    function updateLastUpdated(fetchedAt) {
+        const date = fetchedAt ? new Date(fetchedAt) : new Date();
+        lastUpdatedEl.textContent = date.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
             hour: 'numeric',
             minute: '2-digit',
             hour12: true

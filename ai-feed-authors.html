@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Feed - Authors</title>
+    <link rel="stylesheet" href="ai-feed.css">
+    <style>
+        .authors-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .author-card {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .author-card h2 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+            color: #000;
+        }
+        
+        .author-card h2 a {
+            color: #000;
+            text-decoration: none;
+        }
+        
+        .author-card h2 a:hover {
+            text-decoration: underline;
+        }
+        
+        .author-role {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 12px;
+            font-style: italic;
+        }
+        
+        .author-views {
+            font-size: 14px;
+            color: #333;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+        
+        .author-stance {
+            display: inline-block;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 3px;
+            margin-bottom: 12px;
+            font-weight: bold;
+        }
+        
+        .stance-skeptic {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .stance-optimist {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .stance-pragmatist {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        
+        .stance-technical {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+        
+        .author-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .author-links a {
+            font-size: 12px;
+            color: #fff;
+            background: #ff6600;
+            padding: 5px 12px;
+            border-radius: 3px;
+            text-decoration: none;
+        }
+        
+        .author-links a:hover {
+            background: #e55c00;
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #ff6600;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        
+        .page-description {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <header class="feed-header">
+        <h1><a href="ai-feed.html">AI Thought Leaders Feed</a></h1>
+        <span class="header-subtitle">Authors</span>
+    </header>
+
+    <main class="authors-container">
+        <a href="ai-feed.html" class="back-link">← Back to Feed</a>
+        
+        <p class="page-description">
+            This feed aggregates content from AI researchers, engineers, and commentators 
+            representing diverse perspectives on artificial intelligence—from deep skeptics 
+            to cautious optimists. The goal is to present a balanced view of the ongoing 
+            discourse around AI capabilities, safety, and societal impact.
+        </p>
+
+        <div class="author-card">
+            <h2><a href="https://garymarcus.substack.com/" target="_blank">Gary Marcus</a></h2>
+            <div class="author-role">Cognitive Scientist, AI Researcher, Author</div>
+            <span class="author-stance stance-skeptic">AI Skeptic</span>
+            <p class="author-views">
+                Professor emeritus at NYU and founder of Geometric Intelligence (acquired by Uber). 
+                Marcus is one of the most prominent critics of current deep learning approaches, 
+                arguing that LLMs lack true understanding and that the path to AGI requires 
+                hybrid neurosymbolic approaches combining neural networks with classical AI. 
+                He frequently challenges hype around AI capabilities and timelines.
+            </p>
+            <div class="author-links">
+                <a href="https://garymarcus.substack.com/" target="_blank">Substack</a>
+                <a href="https://bsky.app/profile/garymarcus.bsky.social" target="_blank">Bluesky</a>
+            </div>
+        </div>
+
+        <div class="author-card">
+            <h2><a href="https://simonwillison.net/" target="_blank">Simon Willison</a></h2>
+            <div class="author-role">Independent AI Researcher, Creator of Datasette</div>
+            <span class="author-stance stance-pragmatist">Pragmatic Practitioner</span>
+            <p class="author-views">
+                Co-creator of the Django web framework and prolific open-source developer. 
+                Willison approaches AI from a practical, hands-on perspective—extensively 
+                documenting his experiments with LLMs and building tools around them. 
+                He's neither a hype-man nor a doomer, instead focusing on what these tools 
+                can actually do today, their limitations, and responsible usage patterns. 
+                His blog is an invaluable resource for understanding LLM capabilities through rigorous testing.
+            </p>
+            <div class="author-links">
+                <a href="https://simonwillison.net/" target="_blank">Blog</a>
+                <a href="https://bsky.app/profile/simonwillison.net" target="_blank">Bluesky</a>
+                <a href="https://fedi.simonwillison.net/@simon" target="_blank">Mastodon</a>
+            </div>
+        </div>
+
+        <div class="author-card">
+            <h2><a href="https://karpathy.github.io/" target="_blank">Andrej Karpathy</a></h2>
+            <div class="author-role">AI Researcher, Former Director of AI at Tesla, OpenAI Founding Member</div>
+            <span class="author-stance stance-optimist">Technical Optimist</span>
+            <p class="author-views">
+                One of the most influential figures in deep learning, Karpathy led Tesla's 
+                Autopilot vision team and was a founding member of OpenAI. Known for his 
+                exceptional ability to explain complex AI concepts accessibly, his "Neural 
+                Networks: Zero to Hero" series has educated thousands. He's bullish on AI 
+                capabilities while maintaining technical rigor, often sharing insights on 
+                where the field is heading based on first-principles understanding.
+            </p>
+            <div class="author-links">
+                <a href="https://karpathy.github.io/" target="_blank">Blog</a>
+                <a href="https://www.youtube.com/@AndrejKarpathy" target="_blank">YouTube</a>
+            </div>
+        </div>
+
+        <div class="author-card">
+            <h2><a href="https://fchollet.com/" target="_blank">François Chollet</a></h2>
+            <div class="author-role">AI Researcher at Google, Creator of Keras</div>
+            <span class="author-stance stance-technical">Technical Critic</span>
+            <p class="author-views">
+                Creator of Keras (the popular deep learning framework) and researcher at Google. 
+                Chollet is known for his ARC benchmark, designed to test genuine reasoning 
+                vs. pattern matching in AI systems. He's skeptical of claims that scaling 
+                alone will lead to AGI, arguing that current LLMs demonstrate memorization 
+                and interpolation rather than true intelligence. His perspective combines 
+                deep technical expertise with philosophical rigor about what "intelligence" means.
+            </p>
+            <div class="author-links">
+                <a href="https://arxiv.org/search/?searchtype=author&query=Chollet" target="_blank">arXiv Papers</a>
+            </div>
+        </div>
+
+        <div class="author-card">
+            <h2><a href="https://steve-yegge.medium.com/" target="_blank">Steve Yegge</a></h2>
+            <div class="author-role">Software Engineer, Tech Industry Veteran</div>
+            <span class="author-stance stance-optimist">Enthusiastic Adopter</span>
+            <p class="author-views">
+                Legendary software engineer known for his long-form technical essays and stints 
+                at Amazon, Google, and Grab. Yegge has become one of the most vocal proponents 
+                of "vibe coding"—using AI coding agents to dramatically accelerate software 
+                development. His projects like Beads and Gas Town push the boundaries of 
+                agentic AI workflows. He believes AI is transforming software development 
+                at an exponential pace and that developers who don't adapt will be left behind.
+            </p>
+            <div class="author-links">
+                <a href="https://steve-yegge.medium.com/" target="_blank">Medium</a>
+                <a href="https://github.com/steveyegge" target="_blank">GitHub</a>
+            </div>
+        </div>
+
+        <div class="author-card">
+            <h2><a href="https://www.lesswrong.com/" target="_blank">LessWrong</a></h2>
+            <div class="author-role">Community Blog (Filtered: Eliezer Yudkowsky, Paul Christiano)</div>
+            <span class="author-stance stance-skeptic">AI Safety Focus</span>
+            <p class="author-views">
+                LessWrong is a community blog focused on rationality and AI safety. 
+                <strong>Eliezer Yudkowsky</strong>, founder of MIRI, is perhaps the most prominent 
+                voice warning about existential risks from advanced AI, arguing that alignment 
+                is extremely difficult and that we may be racing toward catastrophe. 
+                <strong>Paul Christiano</strong>, former OpenAI researcher and founder of the 
+                Alignment Research Center, takes a more measured but still concerned approach 
+                to AI safety, focusing on practical alignment research.
+            </p>
+            <div class="author-links">
+                <a href="https://www.lesswrong.com/users/eliezer_yudkowsky" target="_blank">Eliezer Yudkowsky</a>
+                <a href="https://www.lesswrong.com/users/paulfchristiano" target="_blank">Paul Christiano</a>
+            </div>
+        </div>
+    </main>
+
+    <footer class="feed-footer">
+        <p>
+            <a href="ai-feed.html">Back to Feed</a> · 
+            <a href="index.html">Home</a>
+        </p>
+    </footer>
+</body>
+</html>

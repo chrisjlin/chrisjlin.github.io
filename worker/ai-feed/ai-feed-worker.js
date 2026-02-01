@@ -5,6 +5,7 @@
  * Sources:
  * - Gary Marcus (Substack)
  * - Simon Willison (Blog)
+ * - Steve Yegge (Medium)
  * - Andrej Karpathy (Blog)
  * - François Chollet (arXiv)
  * - LessWrong (filtered for Eliezer Yudkowsky, Paul Christiano)
