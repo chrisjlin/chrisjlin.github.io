@@ -25,6 +25,12 @@ const FEED_SOURCES = [
         source: 'Blog'
     },
     {
+        name: 'Steve Yegge',
+        url: 'https://steve-yegge.medium.com/feed',
+        type: 'rss',
+        source: 'Medium'
+    },
+    {
         name: 'Andrej Karpathy',
         url: 'https://karpathy.github.io/feed.xml',
         type: 'rss',
