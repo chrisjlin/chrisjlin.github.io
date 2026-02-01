@@ -7,7 +7,7 @@
     // Configuration
     const CONFIG = {
         // Worker endpoint - update this after deploying the worker
-        workerUrl: 'https://ai-feed.chrisjlin.workers.dev',
+        workerUrl: 'https://ai-feed.christopher-lin-508.workers.dev',
         refreshInterval: 30 * 60 * 1000, // 30 minutes in ms
         maxRetries: 3,
         retryDelay: 5000
