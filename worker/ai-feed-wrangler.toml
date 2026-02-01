@@ -1,0 +1,12 @@
+name = "ai-feed"
+main = "ai-feed-worker.js"
+compatibility_date = "2024-01-01"
+
+# KV Namespace for feed caching
+[[kv_namespaces]]
+binding = "AI_FEED_CACHE"
+id = "ef5979038c6f432fb60ca6a21cf441c8"
+
+# Cron trigger for scheduled feed refresh (every 30 minutes)
+[triggers]
+crons = ["*/30 * * * *"]

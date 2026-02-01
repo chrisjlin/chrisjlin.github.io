@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Thought Leaders Feed</title>
+    <link rel="stylesheet" href="ai-feed.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="feed-header">
+        <div class="header-content">
+            <div class="header-title">
+                <span class="header-icon">◈</span>
+                <h1>AI Thought Leaders Feed</h1>
+            </div>
+            <div class="header-filter">
+                <label for="author-filter">Filter by author:</label>
+                <select id="author-filter">
+                    <option value="all">All Authors</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Feed -->
+    <main class="feed-container">
+        <div id="feed-list" class="feed-list">
+            <div class="loading">Loading feed...</div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="feed-footer">
+        <p>Updates every 30 minutes • Shows posts from the last 30 days</p>
+        <p class="last-updated">Last updated: <span id="last-updated">--</span></p>
+    </footer>
+
+    <script src="ai-feed.js"></script>
+</body>
+</html>
